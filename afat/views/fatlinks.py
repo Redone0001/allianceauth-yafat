@@ -13,7 +13,6 @@ from eve_sde.models import ItemType, SolarSystem
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.handlers.wsgi import WSGIRequest
-from django.db import IntegrityError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -41,11 +40,17 @@ from afat.forms import (
 )
 from afat.helper.fatlinks import get_doctrines, get_esi_fleet_information_by_user
 from afat.helper.time import get_time_delta
+from afat.helper.tracking import (
+    FleetMemberObservation,
+    record_fat_observation,
+    record_fleet_observation,
+)
 from afat.helper.views import convert_fats_to_dict
 from afat.models import (
     Duration,
     Fat,
     FatLink,
+    FatTrackingEvent,
     FleetType,
     Log,
     Setting,
@@ -563,15 +568,15 @@ def add_fat(
         f"for FAT link with hash {fatlink_hash}"
     )
 
-    try:
-        Fat.objects.create(
-            fatlink=fleet,
-            character=character,
-            solar_system=solar_system,
-            ship=ship,
-            corporation_eve_id=character.corporation_id,
-            alliance_eve_id=character.alliance_id,
-        )
+    result = record_fat_observation(
+        fatlink=fleet,
+        character=character,
+        solar_system=solar_system,
+        ship=ship,
+        source=FatTrackingEvent.Source.CLICKABLE,
+    )
+
+    if result.created:
         messages.success(
             request,
             mark_safe(
@@ -587,13 +592,15 @@ def add_fat(
         logger.info(
             f'Participation for fleet "{fleet.fleet or fleet.hash}" registered for {character.character_name}'
         )
-    except IntegrityError:
+    else:
         messages.warning(
             request,
             mark_safe(
                 format_lazy(
                     _(
-                        "<h4>Warning!</h4><p>The selected charcter ({character_name}) is already registered for this FAT link.</p>"
+                        "<h4>Warning!</h4><p>The selected character "
+                        "({character_name}) is already registered for this "
+                        "FAT link.</p>"
                     ),
                     character_name=character.character_name,
                 )
@@ -737,20 +744,15 @@ def process_manual_fat(request: WSGIRequest, fatlink_hash: str) -> HttpResponseR
                         "afat:fatlinks_details_fatlink", fatlink_hash=fatlink_hash
                     )
 
-                fat, created = (  # pylint: disable=unused-variable
-                    Fat.objects.get_or_create(
-                        fatlink=fatlink,
-                        character=character,
-                        defaults={
-                            "solar_system": solar_system,
-                            "ship": ship,
-                            "corporation_eve_id": character.corporation_id,
-                            "alliance_eve_id": character.alliance_id,
-                        },
-                    )
+                result = record_fat_observation(
+                    fatlink=fatlink,
+                    character=character,
+                    solar_system=solar_system,
+                    ship=ship,
+                    source=FatTrackingEvent.Source.MANUAL,
                 )
 
-                if created:
+                if result.created:
                     write_log(
                         request,
                         Log.Event.MANUAL_FAT,
@@ -764,6 +766,22 @@ def process_manual_fat(request: WSGIRequest, fatlink_hash: str) -> HttpResponseR
                                 _(
                                     "<h4>Success!</h4><p>Manual FAT processed.<br>"
                                     "{character_name} has been added flying a {shiptype} "
+                                    "in {system}</p>"
+                                ),
+                                character_name=character.character_name,
+                                shiptype=ship_type,
+                                system=system,
+                            )
+                        ),
+                    )
+                elif result.event:
+                    messages.success(
+                        request,
+                        mark_safe(
+                            format_lazy(
+                                _(
+                                    "<h4>Success!</h4><p>Manual FAT tracking updated.<br>"
+                                    "{character_name} is now flying a {shiptype} "
                                     "in {system}</p>"
                                 ),
                                 character_name=character.character_name,
@@ -855,7 +873,7 @@ def process_fleetsnapshot(request, fatlink_hash) -> HttpResponseRedirect:
 
             logger.debug(f"Fleet Composition: {fleet_composition}")
 
-            fatlinks_to_create = []
+            fleet_observations = []
 
             for line in fleet_composition:
                 # Let's split the lines up by tabs, but first let's make sure to remove
@@ -882,32 +900,35 @@ def process_fleetsnapshot(request, fatlink_hash) -> HttpResponseRedirect:
                     # We need the ship class here, actually
                     ship = ItemType.objects.filter(published=1).get(name_en=line[2])
 
-                    # Add to the list…
-                    fatlinks_to_create.append(
-                        Fat(
+                    # Add to the list.
+                    fleet_observations.append(
+                        FleetMemberObservation(
                             character=character,
-                            fatlink=fatlink,
                             solar_system=solar_system,
                             ship=ship,
-                            corporation_eve_id=character.corporation_id,
-                            alliance_eve_id=character.alliance_id,
                         )
                     )
 
-            logger.debug(f"FATs to create from fleet snapshot: {fatlinks_to_create}")
+            logger.debug(
+                f"Fleet observations from fleet snapshot: {fleet_observations}"
+            )
 
-            Fat.objects.bulk_create(objs=fatlinks_to_create, ignore_conflicts=True)
+            tracking_events = record_fleet_observation(
+                fatlink=fatlink,
+                observations=fleet_observations,
+                source=FatTrackingEvent.Source.SNAPSHOT,
+            )
 
             messages.success(
                 request,
                 mark_safe(
                     format_lazy(
                         ngettext_lazy(
-                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} FAT</p>",
-                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} FATs</p>",
-                            len(fatlinks_to_create),
+                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} tracking event</p>",
+                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} tracking events</p>",
+                            len(tracking_events),
                         ),
-                        count=len(fatlinks_to_create),
+                        count=len(tracking_events),
                     ),
                 ),
             )
@@ -1001,7 +1022,11 @@ def ajax_get_fats_by_fatlink(request: WSGIRequest, fatlink_hash) -> JsonResponse
     :rtype:
     """
 
-    fats = Fat.objects.select_related_default().filter(fatlink__hash=fatlink_hash)
+    fats = (
+        Fat.objects.select_related_default()
+        .filter(fatlink__hash=fatlink_hash)
+        .prefetch_related("tracking_events__solar_system", "tracking_events__ship")
+    )
 
     fat_rows = [convert_fats_to_dict(request=request, fat=fat) for fat in fats]
 

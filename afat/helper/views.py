@@ -24,8 +24,9 @@ from allianceauth.services.hooks import get_extension_logger
 
 # Alliance Auth AFAT
 from afat.helper.users import users_with_permission
-from afat.models import Fat, FatLink
+from afat.models import Fat, FatLink, FatTrackingEvent
 from afat.providers.applogger import AppLogger
+from afat.utils import DATETIME_FORMAT
 
 logger = AppLogger(my_logger=get_extension_logger(name=__name__))
 
@@ -347,6 +348,62 @@ def convert_fats_to_dict(request: WSGIRequest, fat: Fat) -> dict:
             '<i class="fa-solid fa-trash-can fa-fw"></i></a>'
         )
 
+    tracking_events_manager = getattr(fat, "tracking_events", None)
+
+    if hasattr(tracking_events_manager, "all"):
+        tracking_events = list(
+            tracking_events_manager.all().order_by("observed", "pk")
+        )
+    elif tracking_events_manager is not None:
+        tracking_events = list(tracking_events_manager)
+    else:
+        tracking_events = []
+    latest_event = tracking_events[-1] if tracking_events else None
+    is_active = (
+        latest_event is None
+        or latest_event.event != FatTrackingEvent.Event.LEAVE
+    )
+
+    systems_seen = []
+    ships_seen = []
+    timeline_parts = []
+
+    for event in tracking_events:
+        system_name = event.solar_system.name if event.solar_system else None
+        ship_name = event.ship.name if event.ship else None
+
+        if system_name and system_name not in systems_seen:
+            systems_seen.append(system_name)
+
+        if ship_name and ship_name not in ships_seen:
+            ships_seen.append(ship_name)
+
+        observed = timezone.localtime(event.observed).strftime(DATETIME_FORMAT)
+        event_label = event.get_event_display()
+        state_parts = [part for part in (system_name, ship_name) if part]
+        state = f" ({', '.join(state_parts)})" if state_parts else ""
+        timeline_parts.append(f"{observed}: {event_label}{state}")
+
+    fallback_system = fat.solar_system.name if fat.solar_system else None
+    fallback_ship = fat.ship.name if fat.ship else fat.shiptype
+
+    if fallback_system and not systems_seen:
+        systems_seen.append(fallback_system)
+
+    if fallback_ship and not ships_seen:
+        ships_seen.append(fallback_ship)
+
+    current_system = (
+        latest_event.solar_system.name
+        if latest_event and latest_event.solar_system
+        else fallback_system
+    )
+    current_ship = (
+        latest_event.ship.name
+        if latest_event and latest_event.ship
+        else fallback_ship
+    )
+
     fleet_time = fat.fatlink.created
     fleet_time_timestamp = fleet_time.timestamp()
     fleet_name = (
@@ -354,9 +411,15 @@ def convert_fats_to_dict(request: WSGIRequest, fat: Fat) -> dict:
     )
 
     return {
-        "system": fat.solar_system.name,
-        "ship_type": fat.ship.name,
+        "system": current_system,
+        "systems": ", ".join(systems_seen),
+        "ship_type": current_ship,
+        "ship_types": ", ".join(ships_seen),
         "character_name": fat.character.character_name,
+        "status": str(_("In fleet") if is_active else _("Left fleet")),
+        "tracking": "<br>".join(timeline_parts)
+        if timeline_parts
+        else str(_("No tracking events yet")),
         "fleet_name": fleet_name + esi_fleet_marker,
         "doctrine": fat.fatlink.doctrine,
         "fleet_time": {"time": fleet_time, "timestamp": fleet_time_timestamp},

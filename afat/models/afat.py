@@ -366,6 +366,104 @@ class Fat(models.Model):
         return f"{self.fatlink} - {self.character}"
 
 
+class FatTrackingEvent(models.Model):
+    """
+    Time ordered tracking events for a FAT.
+    """
+
+    class Event(models.TextChoices):
+        """
+        Tracking event choices.
+        """
+
+        JOIN = "JOIN", _("Joined fleet")
+        LEAVE = "LEAVE", _("Left fleet")
+        SYSTEM_CHANGE = "SYSTEM_CHANGE", _("Changed system")
+        SHIP_CHANGE = "SHIP_CHANGE", _("Changed ship")
+        SYSTEM_AND_SHIP_CHANGE = "SYS_SHIP_CHANGE", _("Changed system and ship")
+
+    class Source(models.TextChoices):
+        """
+        Tracking source choices.
+        """
+
+        ESI = "esi", _("ESI")
+        CLICKABLE = "clickable", _("Clickable FAT")
+        MANUAL = "manual", _("Manual FAT")
+        SNAPSHOT = "snapshot", _("Fleet snapshot")
+        LEGACY = "legacy", _("Legacy FAT")
+
+    fat = models.ForeignKey(
+        to=Fat,
+        related_name="tracking_events",
+        on_delete=models.CASCADE,
+        help_text=_("The FAT this tracking event belongs to"),
+    )
+
+    observed = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text=_("When this tracking event was observed"),
+    )
+
+    event = models.CharField(
+        max_length=16,
+        choices=Event.choices,
+        db_index=True,
+        help_text=_("What changed for this pilot"),
+    )
+
+    solar_system = models.ForeignKey(
+        to=SolarSystem,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.CASCADE,
+        help_text=_("The system the character was in for this event"),
+    )
+
+    ship = models.ForeignKey(
+        to=ItemType,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.CASCADE,
+        help_text=_("The ship the character was flying for this event"),
+    )
+
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.ESI,
+        db_index=True,
+        help_text=_("Where this tracking event came from"),
+    )
+
+    class Meta:  # pylint: disable=too-few-public-methods
+        """
+        FatTrackingEvent :: Meta
+        """
+
+        default_permissions = ()
+        indexes = [
+            models.Index(fields=("fat", "observed")),
+            models.Index(fields=("fat", "event")),
+        ]
+        ordering = ("observed", "id")
+        verbose_name = _("FAT tracking event")
+        verbose_name_plural = _("FAT tracking events")
+
+    def __str__(self) -> str:
+        """
+        Return the objects string name
+
+        :return:
+        :rtype:
+        """
+
+        return f"{self.fat} - {self.get_event_display()} @ {self.observed}"
+
+
 # AFat Log Model
 class Log(models.Model):
     """

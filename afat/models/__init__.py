@@ -10,6 +10,7 @@ from afat.models.afat import (
     Duration,
     Fat,
     FatLink,
+    FatTrackingEvent,
     FleetType,
     General,
     Log,

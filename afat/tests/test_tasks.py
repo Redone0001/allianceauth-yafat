@@ -724,10 +724,10 @@ class TestProcessCharacterTask(BaseTestCase):
     @patch("afat.models.FatLink.objects.get")
     @patch("afat.tasks.SolarSystem.objects.get")
     @patch("afat.tasks.ItemType.objects.get")
-    @patch("afat.models.Fat.objects.get_or_create")
+    @patch("afat.tasks.record_fat_observation")
     def test_processes_character_when_fatlink_exists(
         self,
-        mock_get_or_create_fat,
+        mock_record_observation,
         mock_get_or_create_ship,
         mock_get_or_create_system,
         mock_get_fatlink,
@@ -736,8 +736,8 @@ class TestProcessCharacterTask(BaseTestCase):
         """
         Test that the process_character task processes a character when the FAT link exists.
 
-        :param mock_get_or_create_fat:
-        :type mock_get_or_create_fat:
+        :param mock_record_observation:
+        :type mock_record_observation:
         :param mock_get_or_create_ship:
         :type mock_get_or_create_ship:
         :param mock_get_or_create_system:
@@ -750,11 +750,18 @@ class TestProcessCharacterTask(BaseTestCase):
         :rtype:
         """
 
-        mock_get_fatlink.return_value = MagicMock()
-        mock_get_character.return_value = MagicMock(corporation_id=1, alliance_id=2)
-        mock_get_or_create_system.return_value = MagicMock(name="SolarSystem")
-        mock_get_or_create_ship.return_value = MagicMock(name="ShipType")
-        mock_get_or_create_fat.return_value = (MagicMock(pk=1), True)
+        mock_fatlink = MagicMock()
+        mock_character = MagicMock(corporation_id=1, alliance_id=2)
+        mock_system = MagicMock(name="SolarSystem")
+        mock_ship = MagicMock(name="ShipType")
+        mock_fat = MagicMock(pk=1)
+        mock_get_fatlink.return_value = mock_fatlink
+        mock_get_character.return_value = mock_character
+        mock_get_or_create_system.return_value = mock_system
+        mock_get_or_create_ship.return_value = mock_ship
+        mock_record_observation.return_value = MagicMock(
+            fat=mock_fat, created=True, event=None
+        )
 
         process_character(1, 2, 3, "valid_hash")
 
@@ -762,7 +769,7 @@ class TestProcessCharacterTask(BaseTestCase):
         mock_get_character.assert_called_once_with(character_id=1)
         mock_get_or_create_system.assert_called_once_with(id=2)
         mock_get_or_create_ship.assert_called_once_with(id=3)
-        mock_get_or_create_fat.assert_called_once()
+        mock_record_observation.assert_called_once()
 
     @patch("afat.tasks.get_or_create_character")
     @patch("afat.models.FatLink.objects.get")
@@ -791,10 +798,10 @@ class TestProcessCharacterTask(BaseTestCase):
     @patch("afat.models.FatLink.objects.get")
     @patch("afat.tasks.SolarSystem.objects.get")
     @patch("afat.tasks.ItemType.objects.get")
-    @patch("afat.models.Fat.objects.get_or_create")
+    @patch("afat.tasks.record_fat_observation")
     def test_does_not_create_duplicate_fat_entry(
         self,
-        mock_get_or_create_fat,
+        mock_record_observation,
         mock_get_or_create_ship,
         mock_get_or_create_system,
         mock_get_fatlink,
@@ -803,8 +810,8 @@ class TestProcessCharacterTask(BaseTestCase):
         """
         Test that the process_character task does not create a duplicate FAT entry when one already exists.
 
-        :param mock_get_or_create_fat:
-        :type mock_get_or_create_fat:
+        :param mock_record_observation:
+        :type mock_record_observation:
         :param mock_get_or_create_ship:
         :type mock_get_or_create_ship:
         :param mock_get_or_create_system:
@@ -817,11 +824,18 @@ class TestProcessCharacterTask(BaseTestCase):
         :rtype:
         """
 
-        mock_get_fatlink.return_value = MagicMock()
-        mock_get_character.return_value = MagicMock(corporation_id=1, alliance_id=2)
-        mock_get_or_create_system.return_value = MagicMock(name="SolarSystem")
-        mock_get_or_create_ship.return_value = MagicMock(name="ShipType")
-        mock_get_or_create_fat.return_value = (MagicMock(pk=1), False)
+        mock_fatlink = MagicMock()
+        mock_character = MagicMock(corporation_id=1, alliance_id=2)
+        mock_system = MagicMock(name="SolarSystem")
+        mock_ship = MagicMock(name="ShipType")
+        mock_fat = MagicMock(pk=1)
+        mock_get_fatlink.return_value = mock_fatlink
+        mock_get_character.return_value = mock_character
+        mock_get_or_create_system.return_value = mock_system
+        mock_get_or_create_ship.return_value = mock_ship
+        mock_record_observation.return_value = MagicMock(
+            fat=mock_fat, created=False, event=None
+        )
 
         process_character(1, 2, 3, "valid_hash")
 
@@ -829,4 +843,4 @@ class TestProcessCharacterTask(BaseTestCase):
         mock_get_character.assert_called_once_with(character_id=1)
         mock_get_or_create_system.assert_called_once_with(id=2)
         mock_get_or_create_ship.assert_called_once_with(id=3)
-        mock_get_or_create_fat.assert_called_once()
+        mock_record_observation.assert_called_once()

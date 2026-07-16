@@ -20,7 +20,8 @@ from esi.exceptions import HTTPClientError
 from esi.models import Token
 
 # Alliance Auth AFAT
-from afat.models import Fat, FatLink, Log, Setting
+from afat.helper.tracking import record_fat_leave, record_fat_observation
+from afat.models import Fat, FatLink, FatTrackingEvent, Log, Setting
 from afat.providers.applogger import AppLogger
 from afat.providers.esi import ESIHandler, esi
 from afat.utils import get_or_create_character
@@ -54,7 +55,13 @@ def process_fats(data_list, data_source: str, fatlink_hash: str) -> None:
     :rtype:
     """
 
+    data_list = list(data_list)
+
     if data_source == "esi":
+        _record_missing_esi_members_as_left(
+            data_list=data_list, fatlink_hash=fatlink_hash
+        )
+
         logger.info(
             msg=(
                 f'Valid fleet for FAT link hash "{fatlink_hash}" found '
@@ -69,7 +76,7 @@ def process_fats(data_list, data_source: str, fatlink_hash: str) -> None:
                 ship_type_id=char["ship_type_id"],
                 fatlink_hash=fatlink_hash,
             )
-            for char in list(data_list)
+            for char in data_list
         ]
 
         if my_tasks:
@@ -92,6 +99,53 @@ def process_fats(data_list, data_source: str, fatlink_hash: str) -> None:
                 f'Unknown data source "{data_source}" for FAT link hash "{fatlink_hash}"'
             )
         )
+
+
+def _record_missing_esi_members_as_left(data_list, fatlink_hash: str) -> None:
+    """
+    Mark pilots as left when they disappear from a complete ESI fleet member list.
+
+    :param data_list:
+    :type data_list:
+    :param fatlink_hash:
+    :type fatlink_hash:
+    :return:
+    :rtype:
+    """
+
+    try:
+        link = FatLink.objects.get(hash=fatlink_hash)
+    except FatLink.DoesNotExist:
+        logger.warning(
+            f'FAT link with hash "{fatlink_hash}" does not exist, skipping leave detection'
+        )
+
+        return
+
+    current_character_ids = {char["character_id"] for char in data_list}
+    existing_fats = (
+        Fat.objects.select_related_default()
+        .filter(fatlink=link)
+        .prefetch_related("tracking_events")
+    )
+
+    for fat in existing_fats:
+        latest_event = fat.tracking_events.order_by("-observed", "-pk").first()
+        is_active = (
+            latest_event is None
+            or latest_event.event != FatTrackingEvent.Event.LEAVE
+        )
+
+        if fat.character.character_id not in current_character_ids and is_active:
+            event = record_fat_leave(
+                fat=fat, source=FatTrackingEvent.Source.ESI
+            )
+
+            if event:
+                logger.info(
+                    f"Pilot {fat.character} left FAT link "
+                    f'"{fatlink_hash}" (FAT ID {fat.pk})'
+                )
 
 
 @shared_task
@@ -126,18 +180,25 @@ def process_character(
         f"for FAT link with hash {fatlink_hash}"
     )
 
-    fat, created = Fat.objects.get_or_create(
+    result = record_fat_observation(
         fatlink=link,
         character=character,
-        corporation_eve_id=character.corporation_id,
-        alliance_eve_id=character.alliance_id,
-        defaults={"solar_system": solar_system, "ship": ship},
+        solar_system=solar_system,
+        ship=ship,
+        source=FatTrackingEvent.Source.ESI,
     )
+    fat = result.fat
 
-    if created:
+    if result.created:
         logger.info(
             f"New Pilot: Adding {character} in {solar_system.name} flying "
             f'a {ship.name} to FAT link "{fatlink_hash}" (FAT ID {fat.pk})'
+        )
+    elif result.event:
+        logger.info(
+            f"Tracking update: {character} in {solar_system.name} flying "
+            f'a {ship.name} for FAT link "{fatlink_hash}" '
+            f"({result.event.get_event_display()})"
         )
     else:
         logger.debug(
