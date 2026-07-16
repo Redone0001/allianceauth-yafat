@@ -21,7 +21,15 @@ from esi.models import Token
 
 # Alliance Auth AFAT
 from afat.helper.tracking import record_fat_leave, record_fat_observation
-from afat.models import Fat, FatLink, FatTrackingEvent, Log, Setting
+from afat.models import (
+    EsiFleetAutoTracking,
+    Fat,
+    FatLink,
+    FatTrackingEvent,
+    Log,
+    Setting,
+    get_hash_on_save,
+)
 from afat.providers.applogger import AppLogger
 from afat.providers.esi import ESIHandler, esi
 from afat.utils import get_or_create_character
@@ -387,6 +395,150 @@ def _process_esi_fatlink(fatlink: FatLink) -> None:
     )
 
 
+def _auto_detect_esi_fatlink(auto_tracking: EsiFleetAutoTracking) -> FatLink | None:
+    """
+    Automatically create an ESI FAT link for an opted-in fleet boss.
+
+    :param auto_tracking:
+    :type auto_tracking:
+    :return:
+    :rtype:
+    """
+
+    required_scopes = ["esi-fleets.read_fleet.v1"]
+    character = auto_tracking.character
+
+    try:
+        esi_token = Token.get_token(
+            character_id=character.character_id, scopes=required_scopes
+        )
+    except Exception as ex:  # pylint: disable=broad-exception-caught
+        logger.debug(
+            "No valid ESI fleet token for automatic tracking on %s: %s",
+            character,
+            ex,
+        )
+
+        return None
+
+    operation = esi.client.Fleets.GetCharactersCharacterIdFleet(
+        character_id=character.character_id, token=esi_token
+    )
+
+    try:
+        fleet_from_esi = ESIHandler.result(operation=operation, use_etag=False)
+    except HTTPClientError as ex:
+        if ex.status_code != 404:
+            logger.debug(
+                "Could not auto-detect ESI fleet for %s: %s", character, ex
+            )
+
+        return None
+    except Exception as ex:  # pylint: disable=broad-exception-caught
+        logger.debug("Could not auto-detect ESI fleet for %s: %s", character, ex)
+
+        return None
+
+    if FatLink.objects.filter(
+        character=character,
+        is_esilink=True,
+        esi_fleet_id=fleet_from_esi.fleet_id,
+    ).exists():
+        return None
+
+    operation = esi.client.Fleets.GetFleetsFleetIdMembers(
+        fleet_id=fleet_from_esi.fleet_id, token=esi_token
+    )
+
+    try:
+        esi_fleet_member = ESIHandler.result(operation=operation, use_etag=False)
+    except Exception as ex:  # pylint: disable=broad-exception-caught
+        logger.debug(
+            "Auto-detected fleet %s for %s, but character is not fleet boss: %s",
+            fleet_from_esi.fleet_id,
+            character,
+            ex,
+        )
+
+        return None
+
+    open_fleets_for_character = FatLink.objects.filter(
+        character=character,
+        is_esilink=True,
+        is_registered_on_esi=True,
+    ).exclude(esi_fleet_id=fleet_from_esi.fleet_id)
+
+    for open_fleet in open_fleets_for_character:
+        _close_esi_fleet(
+            fatlink=open_fleet,
+            reason=(
+                "FC has opened a new automatically detected fleet "
+                f"with {character.character_name}"
+            ),
+        )
+
+    now = timezone.now()
+    fleet_name = (
+        f"Auto ESI Fleet - {character.character_name} - "
+        f"{timezone.localtime(now).strftime('%Y-%m-%d %H:%M')}"
+    )
+    fatlink = FatLink.objects.create(
+        created=now,
+        fleet=fleet_name,
+        creator=auto_tracking.user,
+        character=character,
+        hash=get_hash_on_save(),
+        is_esilink=True,
+        is_registered_on_esi=True,
+        esi_fleet_id=fleet_from_esi.fleet_id,
+    )
+
+    Log.objects.create(
+        user=auto_tracking.user,
+        log_event=Log.Event.CREATE_FATLINK,
+        log_text=(
+            f'Automatically created ESI FAT link "{fleet_name}" '
+            f"for {character.character_name}"
+        ),
+        fatlink_hash=fatlink.hash,
+    )
+
+    logger.info(
+        msg=(
+            f'Automatically created ESI FAT link "{fatlink.hash}" '
+            f"for fleet {fleet_from_esi.fleet_id} from {character}"
+        )
+    )
+
+    process_fats.delay(
+        data_list=[fleet_member.dict() for fleet_member in esi_fleet_member],
+        data_source="esi",
+        fatlink_hash=fatlink.hash,
+    )
+
+    return fatlink
+
+
+def _auto_detect_esi_fatlinks() -> None:
+    """
+    Check opted-in characters for newly opened ESI fleets.
+
+    :return:
+    :rtype:
+    """
+
+    auto_tracking_settings = (
+        EsiFleetAutoTracking.objects.select_related(
+            "character", "user", "user__profile__main_character"
+        )
+        .filter(is_enabled=True)
+        .distinct()
+    )
+
+    for auto_tracking in auto_tracking_settings:
+        _auto_detect_esi_fatlink(auto_tracking=auto_tracking)
+
+
 @shared_task(**{**TASK_DEFAULT_KWARGS, "base": QueueOnce})
 def update_esi_fatlinks() -> None:
     """
@@ -407,6 +559,8 @@ def update_esi_fatlinks() -> None:
             _process_esi_fatlink(fatlink=fatlink)
     else:
         logger.debug(msg="No ESI FAT links to process")
+
+    _auto_detect_esi_fatlinks()
 
 
 @shared_task

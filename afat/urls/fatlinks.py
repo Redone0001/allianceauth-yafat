@@ -28,6 +28,16 @@ urls = [
         name="fatlinks_add_fatlink",
     ),
     path(
+        route="auto-esi-tracking/enable/",
+        view=fatlinks.enable_auto_esi_fleet_tracking,
+        name="fatlinks_enable_auto_esi_fleet_tracking",
+    ),
+    path(
+        route="auto-esi-tracking/<int:character_id>/disable/",
+        view=fatlinks.disable_auto_esi_fleet_tracking,
+        name="fatlinks_disable_auto_esi_fleet_tracking",
+    ),
+    path(
         route="link/create/esi-fatlink/",
         view=fatlinks.create_esi_fatlink,
         name="fatlinks_create_esi_fatlink",

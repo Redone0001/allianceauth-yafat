@@ -8,6 +8,7 @@ Initialization of the afat.models package.
 from afat.models.afat import (
     Doctrine,
     Duration,
+    EsiFleetAutoTracking,
     Fat,
     FatLink,
     FatTrackingEvent,

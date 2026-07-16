@@ -11,11 +11,13 @@ from unittest.mock import ANY, MagicMock, PropertyMock, patch
 import kombu
 
 # Alliance Auth
+from allianceauth.eveonline.models import EveCharacter
 from esi.exceptions import HTTPClientError
 
 # Alliance Auth AFAT
-from afat.models import FatLink
+from afat.models import EsiFleetAutoTracking, FatLink
 from afat.tasks import (
+    _auto_detect_esi_fatlink,
     _check_for_esi_fleet,
     _close_esi_fleet,
     _esi_fatlinks_error_handling,
@@ -26,6 +28,7 @@ from afat.tasks import (
     update_esi_fatlinks,
 )
 from afat.tests import BaseTestCase
+from afat.tests.fixtures.utils import create_user_from_evecharacter
 
 
 class TestLogrotateTask(BaseTestCase):
@@ -258,6 +261,137 @@ class TestProcessEsiFatlink(BaseTestCase):
         _process_esi_fatlink(mock_fatlink)
 
         mock_close_fleet.assert_not_called()
+
+
+class TestAutoDetectEsiFatlink(BaseTestCase):
+    """
+    Test cases for automatic ESI FAT link detection.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """
+        Setup the test class.
+
+        :return:
+        :rtype:
+        """
+
+        super().setUpClass()
+
+        cls.character_1001 = EveCharacter.objects.get(character_id=1001)
+        cls.user, _ = create_user_from_evecharacter(
+            character_id=cls.character_1001.character_id,
+            permissions=["afat.basic_access", "afat.add_fatlink"],
+        )
+
+    @patch("afat.tasks.process_fats.delay")
+    @patch("afat.tasks.get_hash_on_save", return_value="auto_hash")
+    @patch("afat.tasks.ESIHandler.result")
+    @patch("esi.models.Token.get_token")
+    @patch("afat.tasks.esi")
+    def test_creates_fatlink_for_auto_detected_boss_fleet(
+        self,
+        mock_esi,
+        mock_get_token,
+        mock_esi_result,
+        mock_get_hash,
+        mock_process_fats,
+    ):
+        """
+        Test auto detection creates an ESI FAT link for a fleet boss.
+
+        :param mock_esi:
+        :type mock_esi:
+        :param mock_get_token:
+        :type mock_get_token:
+        :param mock_esi_result:
+        :type mock_esi_result:
+        :param mock_get_hash:
+        :type mock_get_hash:
+        :param mock_process_fats:
+        :type mock_process_fats:
+        :return:
+        :rtype:
+        """
+
+        auto_tracking = EsiFleetAutoTracking.objects.create(
+            user=self.user, character=self.character_1001
+        )
+        mock_token = MagicMock()
+        mock_get_token.return_value = mock_token
+        mock_esi_result.side_effect = [
+            MagicMock(fleet_id=987654321),
+            [
+                MagicMock(
+                    dict=lambda: {
+                        "character_id": self.character_1001.character_id,
+                        "solar_system_id": 30000142,
+                        "ship_type_id": 587,
+                    }
+                )
+            ],
+        ]
+
+        fatlink = _auto_detect_esi_fatlink(auto_tracking=auto_tracking)
+
+        self.assertIsNotNone(fatlink)
+        self.assertEqual(fatlink.hash, "auto_hash")
+        self.assertTrue(fatlink.is_esilink)
+        self.assertTrue(fatlink.is_registered_on_esi)
+        self.assertEqual(fatlink.esi_fleet_id, 987654321)
+        mock_get_token.assert_called_once_with(
+            character_id=self.character_1001.character_id,
+            scopes=["esi-fleets.read_fleet.v1"],
+        )
+        mock_esi.client.Fleets.GetCharactersCharacterIdFleet.assert_called_once()
+        mock_esi.client.Fleets.GetFleetsFleetIdMembers.assert_called_once()
+        mock_get_hash.assert_called_once()
+        mock_process_fats.assert_called_once()
+
+    @patch("afat.tasks.process_fats.delay")
+    @patch("afat.tasks.ESIHandler.result")
+    @patch("esi.models.Token.get_token")
+    @patch("afat.tasks.esi")
+    def test_does_not_recreate_existing_detected_fleet(
+        self, mock_esi, mock_get_token, mock_esi_result, mock_process_fats
+    ):
+        """
+        Test auto detection does not create duplicate FAT links.
+
+        :param mock_esi:
+        :type mock_esi:
+        :param mock_get_token:
+        :type mock_get_token:
+        :param mock_esi_result:
+        :type mock_esi_result:
+        :param mock_process_fats:
+        :type mock_process_fats:
+        :return:
+        :rtype:
+        """
+
+        auto_tracking = EsiFleetAutoTracking.objects.create(
+            user=self.user, character=self.character_1001
+        )
+        FatLink.objects.create(
+            fleet="Existing auto fleet",
+            hash="existing_auto_hash",
+            creator=self.user,
+            character=self.character_1001,
+            is_esilink=True,
+            is_registered_on_esi=False,
+            esi_fleet_id=987654321,
+        )
+        mock_get_token.return_value = MagicMock()
+        mock_esi_result.return_value = MagicMock(fleet_id=987654321)
+
+        fatlink = _auto_detect_esi_fatlink(auto_tracking=auto_tracking)
+
+        self.assertIsNone(fatlink)
+        mock_esi.client.Fleets.GetCharactersCharacterIdFleet.assert_called_once()
+        mock_esi.client.Fleets.GetFleetsFleetIdMembers.assert_not_called()
+        mock_process_fats.assert_not_called()
 
 
 class TestEsiFatlinksErrorHandling(BaseTestCase):

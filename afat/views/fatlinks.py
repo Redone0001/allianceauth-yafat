@@ -38,7 +38,11 @@ from afat.forms import (
     FatLinkEditForm,
     FleetSnapshot,
 )
-from afat.helper.fatlinks import get_doctrines, get_esi_fleet_information_by_user
+from afat.helper.fatlinks import (
+    get_auto_esi_fleet_tracking_by_user,
+    get_doctrines,
+    get_esi_fleet_information_by_user,
+)
 from afat.helper.time import get_time_delta
 from afat.helper.tracking import (
     FleetMemberObservation,
@@ -48,6 +52,7 @@ from afat.helper.tracking import (
 from afat.helper.views import convert_fats_to_dict
 from afat.models import (
     Duration,
+    EsiFleetAutoTracking,
     Fat,
     FatLink,
     FatTrackingEvent,
@@ -116,6 +121,7 @@ def add_fatlink(request: WSGIRequest) -> HttpResponse:
             Setting.Field.DEFAULT_FATLINK_EXPIRY_TIME
         ),
         "esi_fleet": get_esi_fleet_information_by_user(request.user),
+        "auto_esi_fleet_tracking": get_auto_esi_fleet_tracking_by_user(request.user),
         "esi_fatlink_form": AFatEsiFatForm(),
         "manual_fatlink_form": AFatClickFatForm(),
         "doctrines": get_doctrines(),
@@ -129,6 +135,151 @@ def add_fatlink(request: WSGIRequest) -> HttpResponse:
         template_name="afat/view/fatlinks/fatlinks-add-fatlink.html",
         context=context,
     )
+
+
+@login_required()
+@permissions_required(perm=("afat.manage_afat", "afat.add_fatlink"))
+@token_required(scopes=["esi-fleets.read_fleet.v1"])
+def enable_auto_esi_fleet_tracking(
+    request: WSGIRequest, token: Token
+) -> HttpResponseRedirect:
+    """
+    Enable automatic ESI fleet tracking for a character.
+
+    :param request:
+    :type request:
+    :param token:
+    :type token:
+    :return:
+    :rtype:
+    """
+
+    character = EveCharacter.objects.get(character_id=token.character_id)
+    auto_tracking, created = EsiFleetAutoTracking.objects.get_or_create(
+        character=character,
+        defaults={"user": request.user},
+    )
+    previous_user = auto_tracking.user
+    was_enabled = auto_tracking.is_enabled
+
+    if not created and (
+        auto_tracking.user != request.user or auto_tracking.is_enabled is False
+    ):
+        auto_tracking.user = request.user
+        auto_tracking.is_enabled = True
+        auto_tracking.save(update_fields=["user", "is_enabled", "updated"])
+
+    if created:
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "enabled for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+    elif previous_user == request.user and was_enabled:
+        messages.info(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Information</h4><p>Automatic ESI fleet tracking "
+                        "is already enabled for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+    elif previous_user == request.user:
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "re-enabled for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+    else:
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "moved to your account for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+
+    logger.info(
+        msg=(
+            "Automatic ESI fleet tracking enabled for "
+            f"{character.character_name} by {request.user}"
+        )
+    )
+
+    return redirect(to="afat:fatlinks_add_fatlink")
+
+
+@login_required()
+@permissions_required(perm=("afat.manage_afat", "afat.add_fatlink"))
+def disable_auto_esi_fleet_tracking(
+    request: WSGIRequest, character_id: int
+) -> HttpResponseRedirect:
+    """
+    Disable automatic ESI fleet tracking for a character.
+
+    :param request:
+    :type request:
+    :param character_id:
+    :type character_id:
+    :return:
+    :rtype:
+    """
+
+    auto_tracking = EsiFleetAutoTracking.objects.filter(
+        user=request.user, character__character_id=character_id
+    ).first()
+
+    if auto_tracking:
+        auto_tracking.is_enabled = False
+        auto_tracking.save(update_fields=["is_enabled", "updated"])
+
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "disabled for {character_name}.</p>"
+                    ),
+                    character_name=auto_tracking.character.character_name,
+                )
+            ),
+        )
+    else:
+        messages.warning(
+            request=request,
+            message=mark_safe(
+                s=_(
+                    "<h4>Warning!</h4><p>No automatic ESI fleet tracking "
+                    "setting was found for this character.</p>"
+                )
+            ),
+        )
+
+    return redirect(to="afat:fatlinks_add_fatlink")
 
 
 @login_required()

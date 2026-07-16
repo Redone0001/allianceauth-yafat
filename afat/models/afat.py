@@ -262,6 +262,63 @@ class FatLink(models.Model):
         return self.afat_fats.count()
 
 
+class EsiFleetAutoTracking(models.Model):
+    """
+    Per-character opt-in for automatically creating ESI FAT links.
+    """
+
+    user = models.ForeignKey(
+        to=User,
+        related_name="afat_esi_fleet_auto_tracking",
+        on_delete=models.CASCADE,
+        help_text=_("The user who enabled automatic fleet tracking"),
+    )
+
+    character = models.OneToOneField(
+        to=EveCharacter,
+        related_name="afat_esi_fleet_auto_tracking",
+        on_delete=models.CASCADE,
+        help_text=_("The character whose fleets should be automatically tracked"),
+    )
+
+    is_enabled = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text=_("Whether automatic fleet tracking is enabled for this character"),
+    )
+
+    created = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text=_("When automatic fleet tracking was enabled"),
+    )
+
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text=_("When this automatic fleet tracking setting was last updated"),
+    )
+
+    class Meta:  # pylint: disable=too-few-public-methods
+        """
+        EsiFleetAutoTracking :: Meta
+        """
+
+        default_permissions = ()
+        ordering = ("character__character_name",)
+        verbose_name = _("ESI fleet auto tracking")
+        verbose_name_plural = _("ESI fleet auto tracking")
+
+    def __str__(self) -> str:
+        """
+        Return the objects string name
+
+        :return:
+        :rtype:
+        """
+
+        return f"{self.character} ({self.user})"
+
+
 class Duration(models.Model):
     """
     FAT link duration (expiry time in minutes)

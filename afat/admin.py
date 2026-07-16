@@ -17,6 +17,7 @@ from afat.app_settings import securegroups_installed
 from afat.forms import DoctrineAdminForm, SettingAdminForm
 from afat.models import (
     Doctrine,
+    EsiFleetAutoTracking,
     Fat,
     FatLink,
     FatTrackingEvent,
@@ -83,6 +84,22 @@ class AFatLinkAdmin(admin.ModelAdmin):
         """
 
         return getattr(obj, "_number_of_fats", None)
+
+
+@admin.register(EsiFleetAutoTracking)
+class EsiFleetAutoTrackingAdmin(admin.ModelAdmin):
+    """
+    Config for ESI fleet auto tracking settings.
+    """
+
+    list_display = ("character", "user", "is_enabled", "created", "updated")
+    list_filter = ("is_enabled",)
+    ordering = ("character__character_name",)
+    search_fields = (
+        "character__character_name",
+        "user__profile__main_character__character_name",
+        "user__username",
+    )
 
 
 @admin.register(Fat)
