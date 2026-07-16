@@ -379,11 +379,11 @@ class TestAutoDetectEsiFatlink(BaseTestCase):
     @patch("afat.tasks.ESIHandler.result")
     @patch("esi.models.Token.get_token")
     @patch("afat.tasks.esi")
-    def test_does_not_recreate_existing_detected_fleet(
+    def test_does_not_recreate_existing_detected_fleet_for_another_character(
         self, mock_esi, mock_get_token, mock_esi_result, mock_process_fats
     ):
         """
-        Test auto detection does not create duplicate FAT links.
+        Test auto detection does not create duplicate FAT links for a fleet ID.
 
         :param mock_esi:
         :type mock_esi:
@@ -404,9 +404,9 @@ class TestAutoDetectEsiFatlink(BaseTestCase):
             fleet="Existing auto fleet",
             hash="existing_auto_hash",
             creator=self.user,
-            character=self.character_1001,
+            character=self.character_1002,
             is_esilink=True,
-            is_registered_on_esi=False,
+            is_registered_on_esi=True,
             esi_fleet_id=987654321,
         )
         mock_get_token.return_value = MagicMock()

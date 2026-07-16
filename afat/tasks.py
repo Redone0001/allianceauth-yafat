@@ -440,10 +440,15 @@ def _auto_detect_esi_fatlink(auto_tracking: EsiFleetAutoTracking) -> FatLink | N
         return None
 
     if FatLink.objects.filter(
-        character=character,
         is_esilink=True,
         esi_fleet_id=fleet_from_esi.fleet_id,
     ).exists():
+        logger.debug(
+            "Auto-detected fleet %s for %s is already tracked",
+            fleet_from_esi.fleet_id,
+            character,
+        )
+
         return None
 
     operation = esi.client.Fleets.GetFleetsFleetIdMembers(
