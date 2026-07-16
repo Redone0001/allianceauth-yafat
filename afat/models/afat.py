@@ -71,6 +71,8 @@ class General(models.Model):
             ("stats_corporation_other", _("Can see statistics of other corporations")),
             # Can view the modules log
             ("log_view", _("Can view the modules log")),
+            # Can inspect FAT tracking events
+            ("inspector", _("Can inspect FAT tracking events")),
         )
         verbose_name = _("AFAT")
 

@@ -369,7 +369,8 @@ To customize the module, the following settings can be managed in your admin bac
 | add_fatlink             | Can create FAT Links                     | Your regular FC or who ever should be able to add FAT links should have this permission                                                                                         |
 | stats_corporation_own   | Can see own corporation statistics       |                                                                                                                                                                                 |
 | stats_corporation_other | Can see statistics of other corporations |                                                                                                                                                                                 |
-| logs_view               | Can view the modules logs                |                                                                                                                                                                                 |
+| log_view                | Can view the modules logs                |                                                                                                                                                                                 |
+| inspector               | Can inspect FAT tracking events          | Gives access to the FAT tracking event inspector.                                                                                                                              |
 
 ## Changelog<a name="changelog"></a>
 
