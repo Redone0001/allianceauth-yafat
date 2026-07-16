@@ -519,7 +519,8 @@ def _auto_detect_esi_fatlink(auto_tracking: EsiFleetAutoTracking) -> FatLink | N
     return fatlink
 
 
-def _auto_detect_esi_fatlinks() -> None:
+@shared_task(**{**TASK_DEFAULT_KWARGS, "base": QueueOnce})
+def auto_detect_esi_fatlinks() -> None:
     """
     Check opted-in characters for newly opened ESI fleets.
 
@@ -559,8 +560,6 @@ def update_esi_fatlinks() -> None:
             _process_esi_fatlink(fatlink=fatlink)
     else:
         logger.debug(msg="No ESI FAT links to process")
-
-    _auto_detect_esi_fatlinks()
 
 
 @shared_task

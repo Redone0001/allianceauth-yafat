@@ -22,6 +22,7 @@ from afat.tasks import (
     _close_esi_fleet,
     _esi_fatlinks_error_handling,
     _process_esi_fatlink,
+    auto_detect_esi_fatlinks,
     logrotate,
     process_character,
     process_fats,
@@ -280,10 +281,35 @@ class TestAutoDetectEsiFatlink(BaseTestCase):
         super().setUpClass()
 
         cls.character_1001 = EveCharacter.objects.get(character_id=1001)
+        cls.character_1002 = EveCharacter.objects.get(character_id=1002)
         cls.user, _ = create_user_from_evecharacter(
             character_id=cls.character_1001.character_id,
             permissions=["afat.basic_access", "afat.add_fatlink"],
         )
+
+    @patch("afat.tasks._auto_detect_esi_fatlink")
+    def test_checks_enabled_auto_tracking_settings(self, mock_auto_detect):
+        """
+        Test the auto-detection task checks enabled opt-in settings.
+
+        :param mock_auto_detect:
+        :type mock_auto_detect:
+        :return:
+        :rtype:
+        """
+
+        enabled_tracking = EsiFleetAutoTracking.objects.create(
+            user=self.user, character=self.character_1001
+        )
+        EsiFleetAutoTracking.objects.create(
+            user=self.user,
+            character=self.character_1002,
+            is_enabled=False,
+        )
+
+        auto_detect_esi_fatlinks()
+
+        mock_auto_detect.assert_called_once_with(auto_tracking=enabled_tracking)
 
     @patch("afat.tasks.process_fats.delay")
     @patch("afat.tasks.get_hash_on_save", return_value="auto_hash")
