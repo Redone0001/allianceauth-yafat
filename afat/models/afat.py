@@ -267,6 +267,8 @@ class EsiFleetAutoTracking(models.Model):
     Per-character opt-in for automatically creating ESI FAT links.
     """
 
+    id = models.BigAutoField(primary_key=True)
+
     user = models.ForeignKey(
         to=User,
         related_name="afat_esi_fleet_auto_tracking",
@@ -428,6 +430,8 @@ class FatTrackingEvent(models.Model):
     Time ordered tracking events for a FAT.
     """
 
+    id = models.BigAutoField(primary_key=True)
+
     class Event(models.TextChoices):
         """
         Tracking event choices.
@@ -503,8 +507,14 @@ class FatTrackingEvent(models.Model):
 
         default_permissions = ()
         indexes = [
-            models.Index(fields=("fat", "observed")),
-            models.Index(fields=("fat", "event")),
+            models.Index(
+                fields=("fat", "observed"),
+                name="afat_fattrac_fat_id_00fdd9_idx",
+            ),
+            models.Index(
+                fields=("fat", "event"),
+                name="afat_fattrac_fat_id_39c7f5_idx",
+            ),
         ]
         ordering = ("observed", "id")
         verbose_name = _("FAT tracking event")
