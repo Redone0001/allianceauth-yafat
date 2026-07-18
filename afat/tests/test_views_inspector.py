@@ -3,6 +3,7 @@ Test inspector view.
 """
 
 # Standard Library
+from datetime import timedelta
 from http import HTTPStatus
 
 # Third Party
@@ -10,6 +11,7 @@ from eve_sde.models import ItemType, SolarSystem
 
 # Django
 from django.urls import reverse
+from django.utils import timezone
 
 # Alliance Auth
 from allianceauth.eveonline.models import EveCharacter
@@ -89,8 +91,14 @@ class TestInspectorView(BaseTestCase):
         """
 
         self.fatlink = FatLink.objects.create(
-            fleet="Inspector Fleet",
+            fleet="Primary Inspector Fleet",
             hash=f"inspector-{self._testMethodName}",
+            creator=self.user_with_inspector,
+            character=self.character_1002,
+        )
+        self.other_fatlink = FatLink.objects.create(
+            fleet="Different Inspector Fleet",
+            hash=f"different-inspector-{self._testMethodName}",
             creator=self.user_with_inspector,
             character=self.character_1002,
         )
@@ -106,8 +114,16 @@ class TestInspectorView(BaseTestCase):
             solar_system=self.system_two,
             ship=self.ship_two,
         )
+        self.fat_three = Fat.objects.create(
+            fatlink=self.other_fatlink,
+            character=self.character_1003,
+            solar_system=self.system_one,
+            ship=self.ship_two,
+        )
+        now = timezone.now()
         FatTrackingEvent.objects.create(
             fat=self.fat_one,
+            observed=now,
             event=FatTrackingEvent.Event.JOIN,
             solar_system=self.system_one,
             ship=self.ship_one,
@@ -115,10 +131,19 @@ class TestInspectorView(BaseTestCase):
         )
         FatTrackingEvent.objects.create(
             fat=self.fat_two,
+            observed=now + timedelta(minutes=1),
             event=FatTrackingEvent.Event.SHIP_CHANGE,
             solar_system=self.system_two,
             ship=self.ship_two,
             source=FatTrackingEvent.Source.SNAPSHOT,
+        )
+        FatTrackingEvent.objects.create(
+            fat=self.fat_three,
+            observed=now + timedelta(minutes=2),
+            event=FatTrackingEvent.Event.LEAVE,
+            solar_system=self.system_one,
+            ship=self.ship_two,
+            source=FatTrackingEvent.Source.ESI,
         )
 
     def test_denies_user_without_inspector_permission(self):
@@ -203,3 +228,46 @@ class TestInspectorView(BaseTestCase):
         self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
         self.assertContains(response=response, text="Inspector System Two")
         self.assertNotContains(response=response, text="Inspector System One")
+
+    def test_filters_tracking_events_by_fatlink(self):
+        """
+        Test inspector FAT link filter searches fleet name and hash.
+
+        :return:
+        :rtype:
+        """
+
+        self.client.force_login(user=self.user_with_inspector)
+
+        response = self.client.get(
+            path=reverse(viewname="afat:inspector_overview"),
+            data={"fatlink": self.other_fatlink.hash},
+        )
+
+        self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
+        self.assertContains(response=response, text="Different Inspector Fleet")
+        self.assertNotContains(response=response, text="Primary Inspector Fleet")
+
+    def test_sorts_tracking_events(self):
+        """
+        Test inspector sorting changes event order.
+
+        :return:
+        :rtype:
+        """
+
+        self.client.force_login(user=self.user_with_inspector)
+
+        response = self.client.get(
+            path=reverse(viewname="afat:inspector_overview"),
+            data={"sort": "fatlink", "direction": "asc"},
+        )
+        content = response.content.decode()
+
+        self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
+        self.assertContains(response=response, text="Different Inspector Fleet")
+        self.assertContains(response=response, text="Primary Inspector Fleet")
+        self.assertLess(
+            content.find("Different Inspector Fleet"),
+            content.find("Primary Inspector Fleet"),
+        )

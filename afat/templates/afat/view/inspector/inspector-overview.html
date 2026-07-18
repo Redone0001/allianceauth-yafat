@@ -16,6 +16,9 @@
     <div class="card card-default mb-3">
         <div class="card-body">
             <form method="get" class="row g-3 align-items-end">
+                <input type="hidden" name="sort" value="{{ sort.current }}">
+                <input type="hidden" name="direction" value="{{ sort.direction }}">
+
                 <div class="col-12 col-md-6 col-xl-3">
                     <label for="afat-inspector-character" class="form-label">{% translate "Character" %}</label>
                     <input
@@ -24,6 +27,17 @@
                         id="afat-inspector-character"
                         name="character"
                         value="{{ filters.character }}"
+                    >
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="afat-inspector-fatlink" class="form-label">{% translate "FAT link" %}</label>
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="afat-inspector-fatlink"
+                        name="fatlink"
+                        value="{{ filters.fatlink }}"
                     >
                 </div>
 
@@ -87,13 +101,48 @@
                 <table class="table table-striped table-hover w-100">
                     <thead>
                         <tr>
-                            <th>{% translate "Observed" %}</th>
-                            <th>{% translate "Character" %}</th>
-                            <th>{% translate "Event" %}</th>
-                            <th>{% translate "Location" %}</th>
-                            <th>{% translate "Ship" %}</th>
-                            <th>{% translate "Source" %}</th>
-                            <th>{% translate "FAT link" %}</th>
+                            <th>
+                                <a href="?{{ sort.links.observed.querystring }}">
+                                    {% translate "Observed" %}
+                                    <i class="fa-solid {{ sort.links.observed.icon }} ms-1"></i>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?{{ sort.links.character.querystring }}">
+                                    {% translate "Character" %}
+                                    <i class="fa-solid {{ sort.links.character.icon }} ms-1"></i>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?{{ sort.links.event.querystring }}">
+                                    {% translate "Event" %}
+                                    <i class="fa-solid {{ sort.links.event.icon }} ms-1"></i>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?{{ sort.links.location.querystring }}">
+                                    {% translate "Location" %}
+                                    <i class="fa-solid {{ sort.links.location.icon }} ms-1"></i>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?{{ sort.links.ship.querystring }}">
+                                    {% translate "Ship" %}
+                                    <i class="fa-solid {{ sort.links.ship.icon }} ms-1"></i>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?{{ sort.links.source.querystring }}">
+                                    {% translate "Source" %}
+                                    <i class="fa-solid {{ sort.links.source.icon }} ms-1"></i>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?{{ sort.links.fatlink.querystring }}">
+                                    {% translate "FAT link" %}
+                                    <i class="fa-solid {{ sort.links.fatlink.icon }} ms-1"></i>
+                                </a>
+                            </th>
                         </tr>
                     </thead>
 
