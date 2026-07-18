@@ -3,16 +3,18 @@
 {% load i18n %}
 
 {% block page_title %}
-    {% translate "FAT tracking inspector" as page_title %}
+    {% translate "FAT event inspector" as page_title %}
     {{ page_title|title }}
 {% endblock %}
 
 {% block afat_header %}
-    {% translate "FAT tracking inspector" as site_title %}
+    {% translate "FAT event inspector" as site_title %}
     {% include "framework/header/page-header.html" with title=site_title %}
 {% endblock %}
 
 {% block afat_body %}
+    {% include "afat/partials/inspector/tabs-navigation.html" %}
+
     <div class="card card-default mb-3">
         <div class="card-body">
             <form method="get" class="row g-3 align-items-end">
@@ -73,7 +75,7 @@
                 </div>
 
                 <div class="col-12 d-flex justify-content-end gap-2">
-                    <a class="btn btn-secondary" href="{% url 'afat:inspector_overview' %}">
+                    <a class="btn btn-secondary" href="{% url 'afat:inspector_event' %}">
                         {% translate "Clear" %}
                     </a>
                     <button type="submit" class="btn btn-primary">

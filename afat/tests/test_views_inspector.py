@@ -156,9 +156,27 @@ class TestInspectorView(BaseTestCase):
 
         self.client.force_login(user=self.user_with_basic_access)
 
+        response = self.client.get(path=reverse(viewname="afat:inspector_event"))
+
+        self.assertEqual(first=response.status_code, second=HTTPStatus.FOUND)
+
+    def test_inspector_root_redirects_to_event_inspector(self):
+        """
+        Test the inspector root redirects to the event inspector subpage.
+
+        :return:
+        :rtype:
+        """
+
+        self.client.force_login(user=self.user_with_inspector)
+
         response = self.client.get(path=reverse(viewname="afat:inspector_overview"))
 
         self.assertEqual(first=response.status_code, second=HTTPStatus.FOUND)
+        self.assertEqual(
+            first=response.url,
+            second=reverse(viewname="afat:inspector_event"),
+        )
 
     def test_shows_tracking_events_for_inspector(self):
         """
@@ -170,7 +188,7 @@ class TestInspectorView(BaseTestCase):
 
         self.client.force_login(user=self.user_with_inspector)
 
-        response = self.client.get(path=reverse(viewname="afat:inspector_overview"))
+        response = self.client.get(path=reverse(viewname="afat:inspector_event"))
 
         self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
         self.assertContains(response=response, text="Inspector System One")
@@ -194,7 +212,7 @@ class TestInspectorView(BaseTestCase):
         self.client.force_login(user=self.user_with_inspector)
 
         response = self.client.get(
-            path=reverse(viewname="afat:inspector_overview"),
+            path=reverse(viewname="afat:inspector_event"),
             data={
                 "event": [
                     FatTrackingEvent.Event.JOIN,
@@ -218,7 +236,7 @@ class TestInspectorView(BaseTestCase):
         self.client.force_login(user=self.user_with_inspector)
 
         response = self.client.get(
-            path=reverse(viewname="afat:inspector_overview"),
+            path=reverse(viewname="afat:inspector_event"),
             data={
                 "location": "System Two",
                 "ship": "Ship Two",
@@ -240,7 +258,7 @@ class TestInspectorView(BaseTestCase):
         self.client.force_login(user=self.user_with_inspector)
 
         response = self.client.get(
-            path=reverse(viewname="afat:inspector_overview"),
+            path=reverse(viewname="afat:inspector_event"),
             data={"fatlink": self.other_fatlink.hash},
         )
 
@@ -259,7 +277,7 @@ class TestInspectorView(BaseTestCase):
         self.client.force_login(user=self.user_with_inspector)
 
         response = self.client.get(
-            path=reverse(viewname="afat:inspector_overview"),
+            path=reverse(viewname="afat:inspector_event"),
             data={"sort": "fatlink", "direction": "asc"},
         )
         content = response.content.decode()
@@ -271,3 +289,44 @@ class TestInspectorView(BaseTestCase):
             content.find("Different Inspector Fleet"),
             content.find("Primary Inspector Fleet"),
         )
+
+    def test_shows_event_correlation_for_inspector(self):
+        """
+        Test users with the inspector permission can search event correlations.
+
+        :return:
+        :rtype:
+        """
+
+        self.client.force_login(user=self.user_with_inspector)
+
+        response = self.client.get(
+            path=reverse(viewname="afat:inspector_correlation"),
+            data={
+                "search": "1",
+                "event_a": FatTrackingEvent.Event.SHIP_CHANGE,
+                "event_b": FatTrackingEvent.Event.LEAVE,
+                "window_minutes": 5,
+            },
+        )
+
+        self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
+        self.assertContains(response=response, text="Correlated events")
+        self.assertContains(response=response, text=self.character_1003.character_name)
+        self.assertContains(response=response, text="Different Inspector Fleet")
+
+    def test_denies_event_correlation_without_inspector_permission(self):
+        """
+        Test users without the inspector permission cannot open correlations.
+
+        :return:
+        :rtype:
+        """
+
+        self.client.force_login(user=self.user_with_basic_access)
+
+        response = self.client.get(
+            path=reverse(viewname="afat:inspector_correlation")
+        )
+
+        self.assertEqual(first=response.status_code, second=HTTPStatus.FOUND)

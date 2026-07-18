@@ -1,0 +1,180 @@
+{% extends "afat/base.html" %}
+
+{% load i18n %}
+
+{% block page_title %}
+    {% translate "FAT event correlation" as page_title %}
+    {{ page_title|title }}
+{% endblock %}
+
+{% block afat_header %}
+    {% translate "FAT event correlation" as site_title %}
+    {% include "framework/header/page-header.html" with title=site_title %}
+{% endblock %}
+
+{% block afat_body %}
+    {% include "afat/partials/inspector/tabs-navigation.html" %}
+
+    <div class="card card-default mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <input type="hidden" name="search" value="1">
+
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="afat-correlation-event-a" class="form-label">{% translate "Event A" %}</label>
+                    <select class="form-select" id="afat-correlation-event-a" name="event_a">
+                        {% for value, label in event_choices %}
+                            <option value="{{ value }}" {% if filters.event_a == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="afat-correlation-event-b" class="form-label">{% translate "Event B" %}</label>
+                    <select class="form-select" id="afat-correlation-event-b" name="event_b">
+                        {% for value, label in event_choices %}
+                            <option value="{{ value }}" {% if filters.event_b == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="afat-correlation-window" class="form-label">{% translate "Within minutes" %}</label>
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="afat-correlation-window"
+                        name="window_minutes"
+                        value="{{ filters.window_minutes }}"
+                        min="1"
+                        max="{{ max_correlation_window_minutes }}"
+                    >
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="afat-correlation-character" class="form-label">{% translate "Character" %}</label>
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="afat-correlation-character"
+                        name="character"
+                        value="{{ filters.character }}"
+                    >
+                </div>
+
+                <div class="col-12 d-flex justify-content-end gap-2">
+                    <a class="btn btn-secondary" href="{% url 'afat:inspector_correlation' %}">
+                        {% translate "Clear" %}
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        {% translate "Search" %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card card-default">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">{% translate "Correlated events" %}</h4>
+                <span class="text-muted">
+                    {% blocktranslate count correlation.match_count as counter %}
+                        {{ counter }} match
+                    {% plural %}
+                        {{ counter }} matches
+                    {% endblocktranslate %}
+                </span>
+            </div>
+
+            {% if correlation.truncated %}
+                <div class="alert alert-warning">
+                    {% blocktranslate with max_matches=max_correlation_matches %}
+                        Result limit reached. Showing the first {{ max_matches }} matches.
+                    {% endblocktranslate %}
+                </div>
+            {% endif %}
+
+            {% if not filters.searched %}
+                <p class="text-muted mb-0">
+                    {% translate "Choose two event types and a time window, then search for per-character event sequences." %}
+                </p>
+            {% elif correlation.groups %}
+                {% for group in correlation.groups %}
+                    <div class="mb-4">
+                        <h5>
+                            <a
+                                href="https://zkillboard.com/character/{{ group.character.character_id }}/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                {{ group.character.character_name }}
+                            </a>
+                            <span class="badge text-bg-secondary ms-2">{{ group.matches|length }}</span>
+                        </h5>
+
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover w-100">
+                                <thead>
+                                    <tr>
+                                        <th>{% translate "Event A observed" %}</th>
+                                        <th>{% translate "Event A" %}</th>
+                                        <th>{% translate "Event B observed" %}</th>
+                                        <th>{% translate "Event B" %}</th>
+                                        <th>{% translate "Delta" %}</th>
+                                        <th>{% translate "FAT link A" %}</th>
+                                        <th>{% translate "FAT link B" %}</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    {% for match in group.matches %}
+                                        <tr>
+                                            <td>{{ match.event_a.observed|date:"Y-m-d H:i" }}</td>
+                                            <td>
+                                                {{ match.event_a.get_event_display }}
+                                                <span class="text-muted">
+                                                    {{ match.event_a.solar_system.name|default:"-" }} / {{ match.event_a.ship.name|default:"-" }}
+                                                </span>
+                                            </td>
+                                            <td>{{ match.event_b.observed|date:"Y-m-d H:i" }}</td>
+                                            <td>
+                                                {{ match.event_b.get_event_display }}
+                                                <span class="text-muted">
+                                                    {{ match.event_b.solar_system.name|default:"-" }} / {{ match.event_b.ship.name|default:"-" }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {% blocktranslate with minutes=match.delta_minutes %}
+                                                    {{ minutes }} min
+                                                {% endblocktranslate %}
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'afat:fatlinks_details_fatlink' match.event_a.fat.fatlink.hash %}">
+                                                    {{ match.event_a.fat.fatlink.fleet }}
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'afat:fatlinks_details_fatlink' match.event_b.fat.fatlink.hash %}">
+                                                    {{ match.event_b.fat.fatlink.fleet }}
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted mb-0">
+                    {% translate "No correlated event sequences found." %}
+                </p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+    {% include "afat/bundles/afat-css.html" %}
+{% endblock %}
