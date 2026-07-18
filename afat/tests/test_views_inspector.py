@@ -150,6 +150,13 @@ class TestInspectorView(BaseTestCase):
         self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
         self.assertContains(response=response, text="Inspector System One")
         self.assertContains(response=response, text="Inspector Ship Two")
+        self.assertContains(
+            response=response,
+            text=(
+                "https://zkillboard.com/character/"
+                f"{self.character_1001.character_id}/"
+            ),
+        )
 
     def test_filters_tracking_events(self):
         """
@@ -164,8 +171,31 @@ class TestInspectorView(BaseTestCase):
         response = self.client.get(
             path=reverse(viewname="afat:inspector_overview"),
             data={
+                "event": [
+                    FatTrackingEvent.Event.JOIN,
+                    FatTrackingEvent.Event.SHIP_CHANGE,
+                ],
+            },
+        )
+
+        self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
+        self.assertContains(response=response, text="Inspector System One")
+        self.assertContains(response=response, text="Inspector System Two")
+
+    def test_filters_tracking_events_by_ship_and_location(self):
+        """
+        Test inspector text filters narrow the tracking event list.
+
+        :return:
+        :rtype:
+        """
+
+        self.client.force_login(user=self.user_with_inspector)
+
+        response = self.client.get(
+            path=reverse(viewname="afat:inspector_overview"),
+            data={
                 "location": "System Two",
-                "event": FatTrackingEvent.Event.SHIP_CHANGE,
                 "ship": "Ship Two",
             },
         )

@@ -43,7 +43,12 @@ def _filtered_tracking_events(request: WSGIRequest) -> QuerySet:
 
     character = request.GET.get("character", "").strip()
     location = request.GET.get("location", "").strip()
-    event = request.GET.get("event", "").strip()
+    valid_events = dict(FatTrackingEvent.Event.choices)
+    event = [
+        event_type
+        for event_type in request.GET.getlist("event")
+        if event_type in valid_events
+    ]
     ship = request.GET.get("ship", "").strip()
 
     if character:
@@ -53,10 +58,7 @@ def _filtered_tracking_events(request: WSGIRequest) -> QuerySet:
         events = events.filter(solar_system__name__icontains=location)
 
     if event:
-        valid_events = dict(FatTrackingEvent.Event.choices)
-
-        if event in valid_events:
-            events = events.filter(event=event)
+        events = events.filter(event__in=event)
 
     if ship:
         events = events.filter(ship__name__icontains=ship)
@@ -95,7 +97,7 @@ def overview(request: WSGIRequest) -> HttpResponse:
         "filters": {
             "character": request.GET.get("character", "").strip(),
             "location": request.GET.get("location", "").strip(),
-            "event": request.GET.get("event", "").strip(),
+            "events": request.GET.getlist("event"),
             "ship": request.GET.get("ship", "").strip(),
         },
         "page_obj": page_obj,

@@ -40,10 +40,9 @@
 
                 <div class="col-12 col-md-6 col-xl-3">
                     <label for="afat-inspector-event" class="form-label">{% translate "Event" %}</label>
-                    <select class="form-select" id="afat-inspector-event" name="event">
-                        <option value="">{% translate "All events" %}</option>
+                    <select class="form-select" id="afat-inspector-event" name="event" multiple size="5">
                         {% for value, label in event_choices %}
-                            <option value="{{ value }}" {% if filters.event == value %}selected{% endif %}>{{ label }}</option>
+                            <option value="{{ value }}" {% if value in filters.events %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -102,7 +101,15 @@
                         {% for tracking_event in page_obj.object_list %}
                             <tr>
                                 <td>{{ tracking_event.observed|date:"Y-m-d H:i" }}</td>
-                                <td>{{ tracking_event.fat.character.character_name }}</td>
+                                <td>
+                                    <a
+                                        href="https://zkillboard.com/character/{{ tracking_event.fat.character.character_id }}/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        {{ tracking_event.fat.character.character_name }}
+                                    </a>
+                                </td>
                                 <td>{{ tracking_event.get_event_display }}</td>
                                 <td>{{ tracking_event.solar_system.name|default:"-" }}</td>
                                 <td>{{ tracking_event.ship.name|default:"-" }}</td>
