@@ -376,6 +376,40 @@ class TestAutoDetectEsiFatlink(BaseTestCase):
         mock_process_fats.assert_called_once()
 
     @patch("afat.tasks.process_fats.delay")
+    @patch("afat.tasks.ESIHandler.result", return_value=None)
+    @patch("esi.models.Token.get_token")
+    @patch("afat.tasks.esi")
+    def test_returns_none_when_auto_detect_fleet_result_is_none(
+        self, mock_esi, mock_get_token, mock_esi_result, mock_process_fats
+    ):
+        """
+        Test auto detection handles a None fleet result without crashing.
+
+        :param mock_esi:
+        :type mock_esi:
+        :param mock_get_token:
+        :type mock_get_token:
+        :param mock_esi_result:
+        :type mock_esi_result:
+        :param mock_process_fats:
+        :type mock_process_fats:
+        :return:
+        :rtype:
+        """
+
+        auto_tracking = EsiFleetAutoTracking.objects.create(
+            user=self.user, character=self.character_1001
+        )
+        mock_get_token.return_value = MagicMock()
+
+        fatlink = _auto_detect_esi_fatlink(auto_tracking=auto_tracking)
+
+        self.assertIsNone(fatlink)
+        mock_esi.client.Fleets.GetCharactersCharacterIdFleet.assert_called_once()
+        mock_esi.client.Fleets.GetFleetsFleetIdMembers.assert_not_called()
+        mock_process_fats.assert_not_called()
+
+    @patch("afat.tasks.process_fats.delay")
     @patch("afat.tasks.ESIHandler.result")
     @patch("esi.models.Token.get_token")
     @patch("afat.tasks.esi")
@@ -872,6 +906,41 @@ class TestCheckForEsiFleet(BaseTestCase):
         self.assertIsNone(result)
         mock_error_handling.assert_called_once_with(
             error_key=FatLink.EsiError.FC_WRONG_FLEET, fatlink=mock_fatlink
+        )
+
+    @patch("afat.utils.esi.__class__.client", new_callable=MagicMock)
+    @patch("afat.tasks._esi_fatlinks_error_handling")
+    @patch("esi.models.Token.get_token")
+    def test_returns_none_when_fleet_result_is_none(
+        self, mock_get_token, mock_error_handling, mock_client
+    ):
+        """
+        Test that _check_for_esi_fleet handles a None fleet result.
+
+        :param mock_get_token:
+        :type mock_get_token:
+        :param mock_error_handling:
+        :type mock_error_handling:
+        :param mock_client:
+        :type mock_client:
+        :return:
+        :rtype:
+        """
+
+        mock_fatlink = MagicMock()
+        mock_fatlink.character.character_id = 12345
+        mock_fatlink.esi_fleet_id = 67890
+
+        mock_get_token.return_value = MagicMock()
+        mock_client.Fleets.GetCharactersCharacterIdFleet.return_value.result.return_value = (
+            None
+        )
+
+        result = _check_for_esi_fleet(fatlink=mock_fatlink)
+
+        self.assertIsNone(result)
+        mock_error_handling.assert_called_once_with(
+            error_key=FatLink.EsiError.NO_FLEET, fatlink=mock_fatlink
         )
 
 

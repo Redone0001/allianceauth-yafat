@@ -302,7 +302,19 @@ def _check_for_esi_fleet(fatlink: FatLink) -> dict | None:
         logger.debug("Fleet from ESI: %s", fleet_from_esi)
         logger.debug("FAT Link ESI fleet ID: %s", fatlink.esi_fleet_id)
 
-        if not fleet_from_esi or fatlink.esi_fleet_id != fleet_from_esi.fleet_id:
+        if not fleet_from_esi:
+            logger.debug(
+                f'No ESI fleet found for fleet "{fatlink.fleet}" of {fatlink.character} '
+                f"(ESI ID: {fatlink.esi_fleet_id})."
+            )
+
+            _esi_fatlinks_error_handling(
+                error_key=FatLink.EsiError.NO_FLEET, fatlink=fatlink
+            )
+
+            return None
+
+        if fatlink.esi_fleet_id != fleet_from_esi.fleet_id:
             logger.debug(
                 f'Fleet ID mismatch for fleet "{fatlink.fleet}" of {fatlink.character} '
                 f"(ESI ID: {fatlink.esi_fleet_id}): ESI fleet ID is {fleet_from_esi.fleet_id}."
@@ -436,6 +448,11 @@ def _auto_detect_esi_fatlink(auto_tracking: EsiFleetAutoTracking) -> FatLink | N
         return None
     except Exception as ex:  # pylint: disable=broad-exception-caught
         logger.debug("Could not auto-detect ESI fleet for %s: %s", character, ex)
+
+        return None
+
+    if not fleet_from_esi:
+        logger.debug("No ESI fleet found for automatic tracking on %s", character)
 
         return None
 
