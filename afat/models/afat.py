@@ -71,6 +71,8 @@ class General(models.Model):
             ("stats_corporation_other", _("Can see statistics of other corporations")),
             # Can view the modules log
             ("log_view", _("Can view the modules log")),
+            # Can inspect FAT tracking events
+            ("inspector", _("Can inspect FAT tracking events")),
         )
         verbose_name = _("AFAT")
 
@@ -262,6 +264,65 @@ class FatLink(models.Model):
         return self.afat_fats.count()
 
 
+class EsiFleetAutoTracking(models.Model):
+    """
+    Per-character opt-in for automatically creating ESI FAT links.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+
+    user = models.ForeignKey(
+        to=User,
+        related_name="afat_esi_fleet_auto_tracking",
+        on_delete=models.CASCADE,
+        help_text=_("The user who enabled automatic fleet tracking"),
+    )
+
+    character = models.OneToOneField(
+        to=EveCharacter,
+        related_name="afat_esi_fleet_auto_tracking",
+        on_delete=models.CASCADE,
+        help_text=_("The character whose fleets should be automatically tracked"),
+    )
+
+    is_enabled = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text=_("Whether automatic fleet tracking is enabled for this character"),
+    )
+
+    created = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text=_("When automatic fleet tracking was enabled"),
+    )
+
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text=_("When this automatic fleet tracking setting was last updated"),
+    )
+
+    class Meta:  # pylint: disable=too-few-public-methods
+        """
+        EsiFleetAutoTracking :: Meta
+        """
+
+        default_permissions = ()
+        ordering = ("character__character_name",)
+        verbose_name = _("ESI fleet auto tracking")
+        verbose_name_plural = _("ESI fleet auto tracking")
+
+    def __str__(self) -> str:
+        """
+        Return the objects string name
+
+        :return:
+        :rtype:
+        """
+
+        return f"{self.character} ({self.user})"
+
+
 class Duration(models.Model):
     """
     FAT link duration (expiry time in minutes)
@@ -364,6 +425,112 @@ class Fat(models.Model):
         """
 
         return f"{self.fatlink} - {self.character}"
+
+
+class FatTrackingEvent(models.Model):
+    """
+    Time ordered tracking events for a FAT.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+
+    class Event(models.TextChoices):
+        """
+        Tracking event choices.
+        """
+
+        JOIN = "JOIN", _("Joined fleet")
+        LEAVE = "LEAVE", _("Left fleet")
+        SYSTEM_CHANGE = "SYSTEM_CHANGE", _("Changed system")
+        SHIP_CHANGE = "SHIP_CHANGE", _("Changed ship")
+        SYSTEM_AND_SHIP_CHANGE = "SYS_SHIP_CHANGE", _("Changed system and ship")
+
+    class Source(models.TextChoices):
+        """
+        Tracking source choices.
+        """
+
+        ESI = "esi", _("ESI")
+        CLICKABLE = "clickable", _("Clickable FAT")
+        MANUAL = "manual", _("Manual FAT")
+        SNAPSHOT = "snapshot", _("Fleet snapshot")
+        LEGACY = "legacy", _("Legacy FAT")
+
+    fat = models.ForeignKey(
+        to=Fat,
+        related_name="tracking_events",
+        on_delete=models.CASCADE,
+        help_text=_("The FAT this tracking event belongs to"),
+    )
+
+    observed = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text=_("When this tracking event was observed"),
+    )
+
+    event = models.CharField(
+        max_length=16,
+        choices=Event.choices,
+        db_index=True,
+        help_text=_("What changed for this pilot"),
+    )
+
+    solar_system = models.ForeignKey(
+        to=SolarSystem,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.CASCADE,
+        help_text=_("The system the character was in for this event"),
+    )
+
+    ship = models.ForeignKey(
+        to=ItemType,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.CASCADE,
+        help_text=_("The ship the character was flying for this event"),
+    )
+
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.ESI,
+        db_index=True,
+        help_text=_("Where this tracking event came from"),
+    )
+
+    class Meta:  # pylint: disable=too-few-public-methods
+        """
+        FatTrackingEvent :: Meta
+        """
+
+        default_permissions = ()
+        indexes = [
+            models.Index(
+                fields=("fat", "observed"),
+                name="afat_fattrac_fat_id_00fdd9_idx",
+            ),
+            models.Index(
+                fields=("fat", "event"),
+                name="afat_fattrac_fat_id_39c7f5_idx",
+            ),
+        ]
+        ordering = ("observed", "id")
+        verbose_name = _("FAT tracking event")
+        verbose_name_plural = _("FAT tracking events")
+
+    def __str__(self) -> str:
+        """
+        Return the objects string name
+
+        :return:
+        :rtype:
+        """
+
+        return f"{self.fat} - {self.get_event_display()} @ {self.observed}"
 
 
 # AFat Log Model

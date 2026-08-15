@@ -31,4 +31,4 @@ class FatManager(models.Manager):
         Apply select_related for default query optimizations.
         """
 
-        return self.select_related("fatlink", "character")
+        return self.select_related("fatlink", "character", "solar_system", "ship")

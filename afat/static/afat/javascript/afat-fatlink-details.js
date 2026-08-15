@@ -19,7 +19,11 @@ $(document).ready(() => {
 
         // Count ship types
         data.forEach((item) => {
-            shipTypeCounts[item.ship_type] = (shipTypeCounts[item.ship_type] || 0) + 1;
+            const shipType = item.ship_type || item.ship_types;
+
+            if (shipType) {
+                shipTypeCounts[shipType] = (shipTypeCounts[shipType] || 0) + 1;
+            }
         });
 
         // Clear and rebuild ship type overview
@@ -48,13 +52,15 @@ $(document).ready(() => {
             data: data,
             columns: [
                 {data: 'character_name'},
-                {data: 'system'},
-                {data: 'ship_type'},
+                {data: 'status'},
+                {data: 'systems'},
+                {data: 'ship_types'},
+                {data: 'tracking'},
                 {data: 'actions'}
             ],
             columnDefs: [
                 {
-                    target: 3,
+                    target: 5,
                     columnControl: _removeColumnControl(),
                     createdCell: (td) => {
                         $(td).addClass('text-end');

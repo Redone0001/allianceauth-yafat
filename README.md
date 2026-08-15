@@ -165,6 +165,11 @@ Configure your AA settings in your `local.py` as follows:
           "schedule": crontab(minute="*/1"),
       }
 
+      CELERYBEAT_SCHEDULE["afat_auto_detect_esi_fatlinks"] = {
+          "task": "afat.tasks.auto_detect_esi_fatlinks",
+          "schedule": crontab(minute="*/1"),
+      }
+
       CELERYBEAT_SCHEDULE["afat_logrotate"] = {
           "task": "afat.tasks.logrotate",
           "schedule": crontab(minute="0", hour="1"),
@@ -227,6 +232,11 @@ Configure your AA settings (`conf/local.py`) as follows:
   if "afat" in INSTALLED_APPS:
       CELERYBEAT_SCHEDULE["afat_update_esi_fatlinks"] = {
           "task": "afat.tasks.update_esi_fatlinks",
+          "schedule": crontab(minute="*/1"),
+      }
+
+      CELERYBEAT_SCHEDULE["afat_auto_detect_esi_fatlinks"] = {
+          "task": "afat.tasks.auto_detect_esi_fatlinks",
           "schedule": crontab(minute="*/1"),
       }
 
@@ -359,7 +369,8 @@ To customize the module, the following settings can be managed in your admin bac
 | add_fatlink             | Can create FAT Links                     | Your regular FC or who ever should be able to add FAT links should have this permission                                                                                         |
 | stats_corporation_own   | Can see own corporation statistics       |                                                                                                                                                                                 |
 | stats_corporation_other | Can see statistics of other corporations |                                                                                                                                                                                 |
-| logs_view               | Can view the modules logs                |                                                                                                                                                                                 |
+| log_view                | Can view the modules logs                |                                                                                                                                                                                 |
+| inspector               | Can inspect FAT tracking events          | Gives access to the FAT tracking event inspector.                                                                                                                              |
 
 ## Changelog<a name="changelog"></a>
 

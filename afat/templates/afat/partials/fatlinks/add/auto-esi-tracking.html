@@ -1,0 +1,46 @@
+{% load i18n %}
+{% load evelinks %}
+
+<hr>
+
+<h5>{% translate "Automatic ESI fleet tracking" %}</h5>
+
+<p>
+    {% blocktranslate %}
+        Enable this for characters you use as fleet boss. When one of these
+        characters starts a fleet, AFAT will create an ESI FAT link and begin
+        tracking it automatically.
+    {% endblocktranslate %}
+</p>
+
+{% if auto_esi_fleet_tracking %}
+    <ul class="esi-fleet-list my-3 p-0">
+        {% for auto_tracking in auto_esi_fleet_tracking %}
+            <li class="esi-fleet-list-item py-2 px-3">
+                <div class="eve-image-with-text">
+                    <div class="eve-image">
+                        <img class="eve-character-portrait rounded me-2" src="{{ auto_tracking.character|character_portrait_url:64 }}" alt="{{ auto_tracking.character.character_name }}" width="48px" height="48px">
+                    </div>
+                    <div class="eve-image-text small">
+                        {{ auto_tracking.character.character_name }}<br>
+                        <small>{% translate "Auto tracking enabled" %}</small>
+                    </div>
+                </div>
+
+                <div>
+                    <a class="btn btn-secondary btn-sm ms-1" href="{% url 'afat:fatlinks_disable_auto_esi_fleet_tracking' auto_tracking.character.character_id %}">
+                        <i class="fa-solid fa-times"></i>
+                        <!-- {% translate "Disable" %} -->
+                    </a>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<div class="form-group text-end">
+    <a class="btn btn-secondary" href="{% url 'afat:fatlinks_enable_auto_esi_fleet_tracking' %}">
+        <span class="fa fa-plus fa-fw"></span>
+        {% translate "Enable for character" %}
+    </a>
+</div>

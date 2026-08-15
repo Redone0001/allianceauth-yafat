@@ -18,7 +18,6 @@ from eve_sde.models import ItemType, SolarSystem
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.db import IntegrityError
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
@@ -651,7 +650,7 @@ class TestProcessManualFat(FatlinksViewTestCase):
         messages = list(get_messages(response.wsgi_request))
         self.assertTrue(
             any(
-                "Pilot is already registered for this FAT link." in str(m)
+                "Manual FAT tracking updated." in str(m)
                 for m in messages
             )
         )
@@ -1209,7 +1208,9 @@ class TestAjaxGetFatsByFatlink(FatlinksViewTestCase):
 
         # Mock the queryset returned by select_related_default
         mock_queryset = MagicMock()
-        mock_queryset.filter.return_value = [mock_fat]
+        mock_filtered_queryset = MagicMock()
+        mock_filtered_queryset.prefetch_related.return_value = [mock_fat]
+        mock_queryset.filter.return_value = mock_filtered_queryset
         mock_select_related_default.return_value = mock_queryset
 
         # Mock the convert_fats_to_dict function to return a JSON-serializable dictionary
@@ -1228,6 +1229,9 @@ class TestAjaxGetFatsByFatlink(FatlinksViewTestCase):
         self.assertEqual(response.status_code, HTTPStatus.OK)
         mock_select_related_default.return_value.filter.assert_called_once_with(
             fatlink__hash="1231"
+        )
+        mock_filtered_queryset.prefetch_related.assert_called_once_with(
+            "tracking_events__solar_system", "tracking_events__ship"
         )
         mock_convert_fats_to_dict.assert_called_once_with(request=ANY, fat=mock_fat)
         self.assertEqual(
@@ -1585,7 +1589,7 @@ class TestAddFatView(BaseTestCase):
 
     @patch("afat.views.fatlinks.ItemType.objects.get")
     @patch("afat.views.fatlinks.SolarSystem.objects.get")
-    @patch("afat.views.fatlinks.Fat.objects.create")
+    @patch("afat.views.fatlinks.record_fat_observation")
     @patch("afat.views.fatlinks.EveCharacter.objects.get")
     @patch("afat.views.fatlinks.esi")
     @patch("afat.views.fatlinks.ESIHandler.result")
@@ -1594,7 +1598,7 @@ class TestAddFatView(BaseTestCase):
         mock_esi_result,
         mock_esi,
         mock_eve_get,
-        mock_fat_create,
+        mock_record_observation,
         mock_get_solar,
         mock_get_type,
     ):
@@ -1607,8 +1611,8 @@ class TestAddFatView(BaseTestCase):
         :type mock_esi:
         :param mock_eve_get:
         :type mock_eve_get:
-        :param mock_fat_create:
-        :type mock_fat_create:
+        :param mock_record_observation:
+        :type mock_record_observation:
         :param mock_get_solar:
         :type mock_get_solar:
         :param mock_get_type:
@@ -1640,9 +1644,6 @@ class TestAddFatView(BaseTestCase):
         shiptype_mock.name = "ShipTypeName"
         mock_get_type.return_value = shiptype_mock
 
-        # Simulate duplicate creation raising IntegrityError
-        mock_fat_create.side_effect = IntegrityError
-
         # Ensure EveCharacter lookup returns a character-like object
         fake_character = MagicMock(
             character_name="Dup User",
@@ -1651,6 +1652,9 @@ class TestAddFatView(BaseTestCase):
             alliance_id=400,
         )
         mock_eve_get.return_value = fake_character
+        mock_record_observation.return_value = MagicMock(
+            created=False, event=None
+        )
 
         # Build request and attach session, messages and user
         url = self.url  # set in setUp
@@ -1676,8 +1680,7 @@ class TestAddFatView(BaseTestCase):
         mock_get_solar.assert_called_once_with(id=location_solar_system_id)
         mock_get_type.assert_called_once_with(id=ship_type_id)
 
-        # Fat.create should have been attempted and raised IntegrityError
-        self.assertTrue(mock_fat_create.called)
+        mock_record_observation.assert_called_once()
 
         # Check that a warning about duplicate registration was added
         messages = list(get_messages(request))
@@ -1770,16 +1773,17 @@ class TestprocessFleetSnapshot(BaseTestCase):
                 "afat.views.fatlinks.get_or_create_character",
                 return_value=self.character_1001,
             ),
-            patch("afat.views.fatlinks.Fat.objects.bulk_create") as mock_bulk,
+            patch(
+                "afat.views.fatlinks.record_fleet_observation", return_value=[]
+            ) as mock_record_observation,
         ):
             response = fatlinks_module.process_fleetsnapshot.__wrapped__.__wrapped__(
                 request, fatlink.hash
             )
 
-        # bulk_create should be called once with one created Fat instance
-        self.assertTrue(mock_bulk.called)
-        objs = mock_bulk.call_args[1]["objs"]
-        self.assertEqual(len(objs), 1)
+        mock_record_observation.assert_called_once()
+        observations = mock_record_observation.call_args[1]["observations"]
+        self.assertEqual(len(observations), 1)
 
         # Redirects to details view and adds a success message
         expected_url = reverse(
@@ -1834,16 +1838,18 @@ class TestprocessFleetSnapshot(BaseTestCase):
                 "afat.views.fatlinks.get_or_create_character",
                 side_effect=[self.character_1001, None],
             ),
-            patch("afat.views.fatlinks.Fat.objects.bulk_create") as mock_bulk,
+            patch(
+                "afat.views.fatlinks.record_fleet_observation", return_value=[]
+            ) as mock_record_observation,
         ):
             fatlinks_module.process_fleetsnapshot.__wrapped__.__wrapped__(
                 request, fatlink.hash
             )
 
-        self.assertTrue(mock_bulk.called)
-        objs = mock_bulk.call_args[1]["objs"]
-        # Only one valid character line should result in one Fat to create
-        self.assertEqual(len(objs), 1)
+        mock_record_observation.assert_called_once()
+        observations = mock_record_observation.call_args[1]["observations"]
+        # Only one valid character line should result in one observation.
+        self.assertEqual(len(observations), 1)
 
         messages = list(get_messages(request))
         self.assertTrue(any("Fleet snapshot processed" in str(m) for m in messages))
@@ -1879,14 +1885,16 @@ class TestprocessFleetSnapshot(BaseTestCase):
 
         with (
             patch("afat.views.fatlinks.get_or_create_character"),
-            patch("afat.views.fatlinks.Fat.objects.bulk_create") as mock_bulk,
+            patch(
+                "afat.views.fatlinks.record_fleet_observation"
+            ) as mock_record_observation,
         ):
             response = fatlinks_module.process_fleetsnapshot.__wrapped__.__wrapped__(
                 request, fatlink.hash
             )
 
-        # bulk_create should not be called for invalid format
-        self.assertFalse(mock_bulk.called)
+        # Tracking should not be called for invalid format.
+        mock_record_observation.assert_not_called()
 
         # Redirect to details view and error message present
         expected_url = reverse(

@@ -39,6 +39,17 @@
     </li>
 {% endif %}
 
+{% if perms.afat.inspector %}
+    <li class="nav-item">
+        <a
+            class="nav-link {% navactive request 'afat:inspector_overview afat:inspector_event afat:inspector_correlation' %}"
+            href="{% url 'afat:inspector_event' %}"
+        >
+            {% translate "Inspector" %}
+        </a>
+    </li>
+{% endif %}
+
 {% if perms.afat.log_view %}
     <li class="nav-item">
         <a

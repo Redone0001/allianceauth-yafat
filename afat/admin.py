@@ -17,8 +17,10 @@ from afat.app_settings import securegroups_installed
 from afat.forms import DoctrineAdminForm, SettingAdminForm
 from afat.models import (
     Doctrine,
+    EsiFleetAutoTracking,
     Fat,
     FatLink,
+    FatTrackingEvent,
     FatsInTimeFilter,
     FleetType,
     Log,
@@ -84,13 +86,29 @@ class AFatLinkAdmin(admin.ModelAdmin):
         return getattr(obj, "_number_of_fats", None)
 
 
+@admin.register(EsiFleetAutoTracking)
+class EsiFleetAutoTrackingAdmin(admin.ModelAdmin):
+    """
+    Config for ESI fleet auto tracking settings.
+    """
+
+    list_display = ("character", "user", "is_enabled", "created", "updated")
+    list_filter = ("is_enabled",)
+    ordering = ("character__character_name",)
+    search_fields = (
+        "character__character_name",
+        "user__profile__main_character__character_name",
+        "user__username",
+    )
+
+
 @admin.register(Fat)
 class AFatAdmin(admin.ModelAdmin):
     """
     Config for fat model
     """
 
-    list_display = ("character", "_solar_system", "_ship", "fatlink")
+    list_display = ("character", "_solar_system", "_ship", "fatlink", "_tracking_events")
     list_filter = (
         ("character", RelatedOnlyFieldListFilter),
         ("solar_system", RelatedOnlyFieldListFilter),
@@ -116,7 +134,7 @@ class AFatAdmin(admin.ModelAdmin):
         :rtype:
         """
 
-        return obj.solar_system.name
+        return obj.solar_system.name if obj.solar_system else None
 
     @admin.display(description=_("Ship"), ordering="ship")
     def _ship(self, obj):
@@ -129,7 +147,64 @@ class AFatAdmin(admin.ModelAdmin):
         :rtype:
         """
 
-        return obj.ship.name
+        return obj.ship.name if obj.ship else obj.shiptype
+
+    @admin.display(description=_("Tracking events"))
+    def _tracking_events(self, obj):
+        """
+        Return the tracking event count
+
+        :param obj:
+        :type obj:
+        :return:
+        :rtype:
+        """
+
+        return obj.tracking_events.count()
+
+
+@admin.register(FatTrackingEvent)
+class FatTrackingEventAdmin(admin.ModelAdmin):
+    """
+    Config for FAT tracking events.
+    """
+
+    list_display = ("observed", "event", "source", "fat", "_solar_system", "_ship")
+    list_filter = ("event", "source")
+    ordering = ("-observed",)
+    search_fields = (
+        "fat__character__character_name",
+        "fat__fatlink__fleet",
+        "fat__fatlink__hash",
+        "solar_system__name",
+        "ship__name",
+    )
+
+    @admin.display(description=_("System"), ordering="solar_system")
+    def _solar_system(self, obj):
+        """
+        Return the solar system name
+
+        :param obj:
+        :type obj:
+        :return:
+        :rtype:
+        """
+
+        return obj.solar_system.name if obj.solar_system else None
+
+    @admin.display(description=_("Ship"), ordering="ship")
+    def _ship(self, obj):
+        """
+        Return the ship type name
+
+        :param obj:
+        :type obj:
+        :return:
+        :rtype:
+        """
+
+        return obj.ship.name if obj.ship else None
 
 
 @admin.register(FleetType)

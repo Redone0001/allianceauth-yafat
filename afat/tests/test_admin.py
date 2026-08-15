@@ -27,8 +27,10 @@ from afat.admin import (
 from afat.forms import DoctrineAdminForm, SettingAdminForm
 from afat.models import (
     Doctrine,
+    EsiFleetAutoTracking,
     Fat,
     FatLink,
+    FatTrackingEvent,
     FatsInTimeFilter,
     FleetType,
     Log,
@@ -474,7 +476,9 @@ class TestFatsInTimeFilterAdmin(BaseTestCase):
         # Ensure a clean state: unregister any models that afat.admin registers
         for model in (
             FatLink,
+            EsiFleetAutoTracking,
             Fat,
+            FatTrackingEvent,
             FleetType,
             Log,
             Setting,
@@ -503,7 +507,9 @@ class TestFatsInTimeFilterAdmin(BaseTestCase):
             # Unregister models to avoid AlreadyRegistered on reload
             for model in (
                 FatLink,
+                EsiFleetAutoTracking,
                 Fat,
+                FatTrackingEvent,
                 FleetType,
                 Log,
                 Setting,
@@ -529,7 +535,9 @@ class TestFatsInTimeFilterAdmin(BaseTestCase):
         # Ensure a clean state: unregister any models that afat.admin registers
         for model in (
             FatLink,
+            EsiFleetAutoTracking,
             Fat,
+            FatTrackingEvent,
             FleetType,
             Log,
             Setting,
@@ -557,7 +565,9 @@ class TestFatsInTimeFilterAdmin(BaseTestCase):
             # Unregister models to avoid AlreadyRegistered on reload
             for model in (
                 FatLink,
+                EsiFleetAutoTracking,
                 Fat,
+                FatTrackingEvent,
                 FleetType,
                 Log,
                 Setting,

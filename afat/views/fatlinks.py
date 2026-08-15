@@ -13,7 +13,6 @@ from eve_sde.models import ItemType, SolarSystem
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.handlers.wsgi import WSGIRequest
-from django.db import IntegrityError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -39,13 +38,24 @@ from afat.forms import (
     FatLinkEditForm,
     FleetSnapshot,
 )
-from afat.helper.fatlinks import get_doctrines, get_esi_fleet_information_by_user
+from afat.helper.fatlinks import (
+    get_auto_esi_fleet_tracking_by_user,
+    get_doctrines,
+    get_esi_fleet_information_by_user,
+)
 from afat.helper.time import get_time_delta
+from afat.helper.tracking import (
+    FleetMemberObservation,
+    record_fat_observation,
+    record_fleet_observation,
+)
 from afat.helper.views import convert_fats_to_dict
 from afat.models import (
     Duration,
+    EsiFleetAutoTracking,
     Fat,
     FatLink,
+    FatTrackingEvent,
     FleetType,
     Log,
     Setting,
@@ -111,6 +121,7 @@ def add_fatlink(request: WSGIRequest) -> HttpResponse:
             Setting.Field.DEFAULT_FATLINK_EXPIRY_TIME
         ),
         "esi_fleet": get_esi_fleet_information_by_user(request.user),
+        "auto_esi_fleet_tracking": get_auto_esi_fleet_tracking_by_user(request.user),
         "esi_fatlink_form": AFatEsiFatForm(),
         "manual_fatlink_form": AFatClickFatForm(),
         "doctrines": get_doctrines(),
@@ -124,6 +135,151 @@ def add_fatlink(request: WSGIRequest) -> HttpResponse:
         template_name="afat/view/fatlinks/fatlinks-add-fatlink.html",
         context=context,
     )
+
+
+@login_required()
+@permissions_required(perm=("afat.manage_afat", "afat.add_fatlink"))
+@token_required(scopes=["esi-fleets.read_fleet.v1"])
+def enable_auto_esi_fleet_tracking(
+    request: WSGIRequest, token: Token
+) -> HttpResponseRedirect:
+    """
+    Enable automatic ESI fleet tracking for a character.
+
+    :param request:
+    :type request:
+    :param token:
+    :type token:
+    :return:
+    :rtype:
+    """
+
+    character = EveCharacter.objects.get(character_id=token.character_id)
+    auto_tracking, created = EsiFleetAutoTracking.objects.get_or_create(
+        character=character,
+        defaults={"user": request.user},
+    )
+    previous_user = auto_tracking.user
+    was_enabled = auto_tracking.is_enabled
+
+    if not created and (
+        auto_tracking.user != request.user or auto_tracking.is_enabled is False
+    ):
+        auto_tracking.user = request.user
+        auto_tracking.is_enabled = True
+        auto_tracking.save(update_fields=["user", "is_enabled", "updated"])
+
+    if created:
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "enabled for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+    elif previous_user == request.user and was_enabled:
+        messages.info(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Information</h4><p>Automatic ESI fleet tracking "
+                        "is already enabled for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+    elif previous_user == request.user:
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "re-enabled for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+    else:
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "moved to your account for {character_name}.</p>"
+                    ),
+                    character_name=character.character_name,
+                )
+            ),
+        )
+
+    logger.info(
+        msg=(
+            "Automatic ESI fleet tracking enabled for "
+            f"{character.character_name} by {request.user}"
+        )
+    )
+
+    return redirect(to="afat:fatlinks_add_fatlink")
+
+
+@login_required()
+@permissions_required(perm=("afat.manage_afat", "afat.add_fatlink"))
+def disable_auto_esi_fleet_tracking(
+    request: WSGIRequest, character_id: int
+) -> HttpResponseRedirect:
+    """
+    Disable automatic ESI fleet tracking for a character.
+
+    :param request:
+    :type request:
+    :param character_id:
+    :type character_id:
+    :return:
+    :rtype:
+    """
+
+    auto_tracking = EsiFleetAutoTracking.objects.filter(
+        user=request.user, character__character_id=character_id
+    ).first()
+
+    if auto_tracking:
+        auto_tracking.is_enabled = False
+        auto_tracking.save(update_fields=["is_enabled", "updated"])
+
+        messages.success(
+            request=request,
+            message=mark_safe(
+                s=format_lazy(
+                    _(
+                        "<h4>Success!</h4><p>Automatic ESI fleet tracking "
+                        "disabled for {character_name}.</p>"
+                    ),
+                    character_name=auto_tracking.character.character_name,
+                )
+            ),
+        )
+    else:
+        messages.warning(
+            request=request,
+            message=mark_safe(
+                s=_(
+                    "<h4>Warning!</h4><p>No automatic ESI fleet tracking "
+                    "setting was found for this character.</p>"
+                )
+            ),
+        )
+
+    return redirect(to="afat:fatlinks_add_fatlink")
 
 
 @login_required()
@@ -563,15 +719,15 @@ def add_fat(
         f"for FAT link with hash {fatlink_hash}"
     )
 
-    try:
-        Fat.objects.create(
-            fatlink=fleet,
-            character=character,
-            solar_system=solar_system,
-            ship=ship,
-            corporation_eve_id=character.corporation_id,
-            alliance_eve_id=character.alliance_id,
-        )
+    result = record_fat_observation(
+        fatlink=fleet,
+        character=character,
+        solar_system=solar_system,
+        ship=ship,
+        source=FatTrackingEvent.Source.CLICKABLE,
+    )
+
+    if result.created:
         messages.success(
             request,
             mark_safe(
@@ -587,13 +743,15 @@ def add_fat(
         logger.info(
             f'Participation for fleet "{fleet.fleet or fleet.hash}" registered for {character.character_name}'
         )
-    except IntegrityError:
+    else:
         messages.warning(
             request,
             mark_safe(
                 format_lazy(
                     _(
-                        "<h4>Warning!</h4><p>The selected charcter ({character_name}) is already registered for this FAT link.</p>"
+                        "<h4>Warning!</h4><p>The selected character "
+                        "({character_name}) is already registered for this "
+                        "FAT link.</p>"
                     ),
                     character_name=character.character_name,
                 )
@@ -737,20 +895,15 @@ def process_manual_fat(request: WSGIRequest, fatlink_hash: str) -> HttpResponseR
                         "afat:fatlinks_details_fatlink", fatlink_hash=fatlink_hash
                     )
 
-                fat, created = (  # pylint: disable=unused-variable
-                    Fat.objects.get_or_create(
-                        fatlink=fatlink,
-                        character=character,
-                        defaults={
-                            "solar_system": solar_system,
-                            "ship": ship,
-                            "corporation_eve_id": character.corporation_id,
-                            "alliance_eve_id": character.alliance_id,
-                        },
-                    )
+                result = record_fat_observation(
+                    fatlink=fatlink,
+                    character=character,
+                    solar_system=solar_system,
+                    ship=ship,
+                    source=FatTrackingEvent.Source.MANUAL,
                 )
 
-                if created:
+                if result.created:
                     write_log(
                         request,
                         Log.Event.MANUAL_FAT,
@@ -764,6 +917,22 @@ def process_manual_fat(request: WSGIRequest, fatlink_hash: str) -> HttpResponseR
                                 _(
                                     "<h4>Success!</h4><p>Manual FAT processed.<br>"
                                     "{character_name} has been added flying a {shiptype} "
+                                    "in {system}</p>"
+                                ),
+                                character_name=character.character_name,
+                                shiptype=ship_type,
+                                system=system,
+                            )
+                        ),
+                    )
+                elif result.event:
+                    messages.success(
+                        request,
+                        mark_safe(
+                            format_lazy(
+                                _(
+                                    "<h4>Success!</h4><p>Manual FAT tracking updated.<br>"
+                                    "{character_name} is now flying a {shiptype} "
                                     "in {system}</p>"
                                 ),
                                 character_name=character.character_name,
@@ -855,7 +1024,7 @@ def process_fleetsnapshot(request, fatlink_hash) -> HttpResponseRedirect:
 
             logger.debug(f"Fleet Composition: {fleet_composition}")
 
-            fatlinks_to_create = []
+            fleet_observations = []
 
             for line in fleet_composition:
                 # Let's split the lines up by tabs, but first let's make sure to remove
@@ -882,32 +1051,35 @@ def process_fleetsnapshot(request, fatlink_hash) -> HttpResponseRedirect:
                     # We need the ship class here, actually
                     ship = ItemType.objects.filter(published=1).get(name_en=line[2])
 
-                    # Add to the list…
-                    fatlinks_to_create.append(
-                        Fat(
+                    # Add to the list.
+                    fleet_observations.append(
+                        FleetMemberObservation(
                             character=character,
-                            fatlink=fatlink,
                             solar_system=solar_system,
                             ship=ship,
-                            corporation_eve_id=character.corporation_id,
-                            alliance_eve_id=character.alliance_id,
                         )
                     )
 
-            logger.debug(f"FATs to create from fleet snapshot: {fatlinks_to_create}")
+            logger.debug(
+                f"Fleet observations from fleet snapshot: {fleet_observations}"
+            )
 
-            Fat.objects.bulk_create(objs=fatlinks_to_create, ignore_conflicts=True)
+            tracking_events = record_fleet_observation(
+                fatlink=fatlink,
+                observations=fleet_observations,
+                source=FatTrackingEvent.Source.SNAPSHOT,
+            )
 
             messages.success(
                 request,
                 mark_safe(
                     format_lazy(
                         ngettext_lazy(
-                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} FAT</p>",
-                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} FATs</p>",
-                            len(fatlinks_to_create),
+                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} tracking event</p>",
+                            "<h4>Success!</h4><p>Fleet snapshot processed: {count} tracking events</p>",
+                            len(tracking_events),
                         ),
-                        count=len(fatlinks_to_create),
+                        count=len(tracking_events),
                     ),
                 ),
             )
@@ -1001,7 +1173,11 @@ def ajax_get_fats_by_fatlink(request: WSGIRequest, fatlink_hash) -> JsonResponse
     :rtype:
     """
 
-    fats = Fat.objects.select_related_default().filter(fatlink__hash=fatlink_hash)
+    fats = (
+        Fat.objects.select_related_default()
+        .filter(fatlink__hash=fatlink_hash)
+        .prefetch_related("tracking_events__solar_system", "tracking_events__ship")
+    )
 
     fat_rows = [convert_fats_to_dict(request=request, fat=fat) for fat in fats]
 

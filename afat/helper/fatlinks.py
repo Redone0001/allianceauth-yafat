@@ -10,7 +10,7 @@ from allianceauth.authentication.admin import User
 
 # Alliance Auth AFAT
 from afat.app_settings import use_fittings_module_for_doctrines
-from afat.models import FatLink
+from afat.models import EsiFleetAutoTracking, FatLink
 
 
 def get_esi_fleet_information_by_user(
@@ -43,6 +43,23 @@ def get_esi_fleet_information_by_user(
         "has_open_esi_fleets": has_open_esi_fleets,
         "open_esi_fleets_list": open_esi_fleets_list,
     }
+
+
+def get_auto_esi_fleet_tracking_by_user(user: User) -> QuerySet:
+    """
+    Get enabled automatic ESI fleet tracking settings for a user.
+
+    :param user:
+    :type user:
+    :return:
+    :rtype:
+    """
+
+    return (
+        EsiFleetAutoTracking.objects.select_related("character", "user")
+        .filter(user=user, is_enabled=True)
+        .order_by("character__character_name")
+    )
 
 
 def get_doctrines() -> QuerySet:
