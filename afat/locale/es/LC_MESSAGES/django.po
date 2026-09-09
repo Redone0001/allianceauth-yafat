@@ -5,9 +5,9 @@
 # Zigor Fernandez Moreno <sietehierros@gmail.com>, 2023, 2024, 2026.
 msgid ""
 msgstr ""
-"Project-Id-Version: Alliance Auth Fleet Activity Tracker (AFAT) 3.5.3\n"
-"Report-Msgid-Bugs-To: https://github.com/ppfeufer/allianceauth-afat/issues\n"
-"POT-Creation-Date: 2026-08-04 08:48+0200\n"
+"Project-Id-Version: Alliance Auth AFAT\n"
+"Report-Msgid-Bugs-To: https://weblate.ppfeufer.de/projects/alliance-auth-apps/allianceauth-afat/\n"
+"POT-Creation-Date: 2026-09-08 12:19+0200\n"
 "PO-Revision-Date: 2026-07-07 10:49+0000\n"
 "Last-Translator: Zigor Fernandez Moreno <sietehierros@gmail.com>\n"
 "Language-Team: Spanish <https://weblate.ppfeufer.de/projects/alliance-auth-apps/allianceauth-afat/es/>\n"
