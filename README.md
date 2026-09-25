@@ -131,10 +131,10 @@ information, see below.
 #### Step 1: Install the App<a name="step-1-install-the-app"></a>
 
 Make sure you're in the virtual environment (venv) of your Alliance Auth installation.
-Then install the latest version:
+Install this fork's current version (`6.2.1+jaka1`) from GitHub:
 
 ```shell
-pip install allianceauth-afat==6.2.1
+python -m pip install --upgrade "allianceauth-afat @ git+https://github.com/Redone0001/allianceauth-yafat.git@master"
 ```
 
 #### Step 2: Update Your AA Settings<a name="step-2-update-your-aa-settings"></a>
@@ -158,7 +158,7 @@ Configure your AA settings in your `local.py` as follows:
 - Add the Scheduled Tasks
 
   ```python
-  # AFAT - https://github.com/ppfeufer/allianceauth-afat
+  # AFAT - https://github.com/Redone0001/allianceauth-yafat
   if "afat" in INSTALLED_APPS:
       CELERYBEAT_SCHEDULE["afat_update_esi_fatlinks"] = {
           "task": "afat.tasks.update_esi_fatlinks",
@@ -204,7 +204,7 @@ python manage.py esde_load_sde
 Add the app to your `conf/requirements.txt`:
 
 ```text
-allianceauth-afat==6.2.1
+allianceauth-afat @ git+https://github.com/Redone0001/allianceauth-yafat.git@master
 ```
 
 #### Step 2: Update Your AA Settings<a name="step-2-update-your-aa-settings-1"></a>
@@ -228,7 +228,7 @@ Configure your AA settings (`conf/local.py`) as follows:
 - Add the Scheduled Tasks
 
   ```python
-  # AFAT - https://github.com/ppfeufer/allianceauth-afat
+  # AFAT - https://github.com/Redone0001/allianceauth-yafat
   if "afat" in INSTALLED_APPS:
       CELERYBEAT_SCHEDULE["afat_update_esi_fatlinks"] = {
           "task": "afat.tasks.update_esi_fatlinks",
@@ -284,7 +284,7 @@ To update your existing installation of AFAT, first enable your
 virtual environment (venv) of your Alliance Auth installation.
 
 ```shell
-pip install allianceauth-afat==6.2.1
+python -m pip install --upgrade "allianceauth-afat @ git+https://github.com/Redone0001/allianceauth-yafat.git@master"
 
 python manage.py collectstatic
 python manage.py migrate
@@ -300,7 +300,7 @@ To update your existing installation of AFAT, all you need to do is to update th
 respective line in your `conf/requirements.txt` file to the latest version.
 
 ```text
-allianceauth-afat==6.2.1
+allianceauth-afat @ git+https://github.com/Redone0001/allianceauth-yafat.git@master
 ```
 
 Now rebuild your containers:
