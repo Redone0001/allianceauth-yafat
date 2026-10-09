@@ -117,7 +117,7 @@ information, see below.
 
 > [!IMPORTANT]
 >
-> This app is utilising features that are only available in Alliance Auth >= 4.12.0.
+> This app is utilising features that are only available in Alliance Auth >= 5.5.
 > Please make sure to update your Alliance Auth instance before installing this app,
 > otherwise, an update to Alliance Auth will be pulled in unsupervised.
 
@@ -131,7 +131,7 @@ information, see below.
 #### Step 1: Install the App<a name="step-1-install-the-app"></a>
 
 Make sure you're in the virtual environment (venv) of your Alliance Auth installation.
-Install this fork's current version (`6.2.1+jaka1`) from GitHub:
+Install this fork's current version (`6.3.0+jaka1`) from GitHub:
 
 ```shell
 python -m pip install --upgrade "allianceauth-afat @ git+https://github.com/Redone0001/allianceauth-yafat.git@master"

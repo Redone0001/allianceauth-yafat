@@ -1,4 +1,4 @@
-# Release to PyPI using Trusted Publishing
+# Build release assets; publish to PyPI only from the upstream repository
 # This workflow is triggered when a release is published on GitHub.
 #
 # https://docs.pypi.org/trusted-publishers/
@@ -49,6 +49,7 @@ jobs:
 
       # Publish to PyPI using Trusted Publishing
       - name: Upload to PyPI
+        if: github.repository == 'ppfeufer/allianceauth-afat'
         uses: pypa/gh-action-pypi-publish@release/v1
 
       # Add Assets to Release on GitHub

@@ -48,6 +48,29 @@ Section Order:
 
 <!-- Your changes go here -->
 
+## [6.3.0+jaka1] - 2026-10-09
+
+### Changed
+
+- Merge upstream v6.3.0 and subsequent updates through `af29bf23`.
+- Switch ESI HTTP handling to `httpx2`.
+- Require Alliance Auth 5.5 or newer and django-eveonline-sde 0.2 or newer.
+- Retain automatic ESI fleet detection, tracking events, and the tracking inspector.
+- Update translations and development dependencies.
+
+## [6.3.0] - 2026-10-04
+
+> [!IMPORTANT]
+>
+> **This version needs Alliance Auth v5.5.0 or newer!**
+>
+> Please make sure to update your Alliance Auth instance **before** you install this
+> version; otherwise, an update to Alliance Auth will be pulled in unsupervised.
+
+### Changed
+
+- Switch to `httpx2`
+
 ## [6.2.1] - 2026-09-08
 
 ### Changed
@@ -2283,6 +2306,9 @@ Finally restart your supervisor services for AA
 [6.1.1]: https://github.com/ppfeufer/allianceauth-afat/compare/v6.1.0...v6.1.1 "v6.1.1"
 [6.2.0]: https://github.com/ppfeufer/allianceauth-afat/compare/v6.1.1...v6.2.0 "v6.2.0"
 [6.2.1]: https://github.com/ppfeufer/allianceauth-afat/compare/v6.2.0...v6.2.1 "v6.2.1"
-[in development]: https://github.com/ppfeufer/allianceauth-afat/compare/v6.2.1...HEAD "In Development"
+[6.3.0]: https://github.com/ppfeufer/allianceauth-afat/compare/v6.2.1...v6.3.0 "v6.3.0"
+[in development]: https://github.com/ppfeufer/allianceauth-afat/compare/v6.3.0...HEAD "In Development"
 [keep a changelog]: http://keepachangelog.com/ "Keep a Changelog"
 [semantic versioning]: http://semver.org/ "Semantic Versioning"
+
+[6.3.0+jaka1]: https://github.com/Redone0001/allianceauth-yafat/releases/tag/v6.3.0%2Bjaka1
